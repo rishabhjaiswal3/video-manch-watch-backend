@@ -46,6 +46,9 @@ export interface IVideo extends Document {
     error?: string;
   };
 
+  // Transcoding completed flag
+  transcodingCompleted?: boolean;
+
   // Performance metrics (KPIs)
   kpis?: {
     timings: {
