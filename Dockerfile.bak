@@ -81,7 +81,7 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package.json ./
 
 # Create temp directory for video processing
-RUN mkdir -p /tmp/itube && chmod 777 /tmp/itube
+RUN mkdir -p /tmp/videomanch && chmod 777 /tmp/videomanch
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \

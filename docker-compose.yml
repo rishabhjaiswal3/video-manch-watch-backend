@@ -61,7 +61,7 @@ services:
     restart: unless-stopped
     # Mount temp directory for better performance (optional)
     volumes:
-      - worker-temp:/tmp/itube
+      - worker-temp:/tmp/videomanch
     # Increase memory for video processing
     deploy:
       resources:

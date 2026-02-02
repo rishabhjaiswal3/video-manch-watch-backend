@@ -29,7 +29,6 @@ interface EnvConfig {
   R2_ACCOUNT_ID: string;
   R2_ACCESS_KEY_ID: string;
   R2_SECRET_ACCESS_KEY: string;
-  R2_BUCKET_NAME: string;
   R2_PUBLIC_URL: string | undefined;
 }
 
@@ -45,13 +44,11 @@ interface ValidationResult {
  */
 const REQUIRED_VARS = [
   'MONGODB_URI',
-  'REDIS_HOST',
   'JWT_SECRET',
   'REFRESH_TOKEN_SECRET',
   'R2_ACCOUNT_ID',
   'R2_ACCESS_KEY_ID',
   'R2_SECRET_ACCESS_KEY',
-  'R2_BUCKET_NAME',
 ] as const;
 
 /**

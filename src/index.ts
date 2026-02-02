@@ -22,6 +22,16 @@ const PORT = env.PORT;
 let isShuttingDown = false;
 let server: http.Server;
 
+// Health check FIRST - before any middleware
+// This ensures Railway's health checker can always reach it
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+  });
+});
+
 // Middleware
 app.use(cors({
   origin: env.FRONTEND_URL,
@@ -57,29 +67,6 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/playback', playbackRoutes);
 
-
-// Health check with dependency status
-app.get('/health', async (req, res) => {
-  try {
-    const mongoose = await import('mongoose');
-    const mongoStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
-
-    res.json({
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-      dependencies: {
-        mongodb: mongoStatus,
-      },
-    });
-  } catch (error) {
-    res.status(503).json({
-      status: 'error',
-      timestamp: new Date().toISOString(),
-      error: 'Health check failed',
-    });
-  }
-});
 
 // 404 handler
 app.use(notFoundHandler);
@@ -141,9 +128,9 @@ const startServer = async () => {
     // Connect to MongoDB
     await connectDatabase();
 
-    server = app.listen(PORT, () => {
+    server = app.listen(PORT, '0.0.0.0', () => {
       console.log(`\n${'='.repeat(50)}`);
-      console.log(`Server running on port ${PORT}`);
+      console.log(`Server running on 0.0.0.0:${PORT}`);
       console.log(`Environment: ${env.NODE_ENV}`);
       console.log(`Health check: http://localhost:${PORT}/health`);
       console.log(`${'='.repeat(50)}\n`);
