@@ -1,4 +1,4 @@
-# I_TUBE Backend API
+# VIDEO MANCH
 
 REST API server for the I_TUBE video streaming platform.
 
