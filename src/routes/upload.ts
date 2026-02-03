@@ -38,7 +38,7 @@ router.post('/init', authenticate, uploadLimiter as any, async (req: Request, re
 
     // Validate required fields
     if (!filename || !fileSize || !mimeType || !title) {
-      console.warn(`[UPLOAD-INIT] ⚠️ Missing required fields`);
+      // console.warn(`[UPLOAD-INIT] ⚠️ Missing required fields`);
       return res.status(400).json({
         success: false,
         error: 'Missing required fields: filename, fileSize, mimeType, title',
@@ -47,7 +47,7 @@ router.post('/init', authenticate, uploadLimiter as any, async (req: Request, re
 
     // Validate mime type
     if (!ALLOWED_MIME_TYPES.includes(mimeType)) {
-      console.warn(`[UPLOAD-INIT] ⚠️ Invalid mime type: ${mimeType}`);
+      // console.warn(`[UPLOAD-INIT] ⚠️ Invalid mime type: ${mimeType}`);
       return res.status(400).json({
         success: false,
         error: `Invalid file type. Allowed types: ${ALLOWED_MIME_TYPES.join(', ')}`,
@@ -57,7 +57,7 @@ router.post('/init', authenticate, uploadLimiter as any, async (req: Request, re
     // Validate file size
     const maxSize = userType === 'creator' ? MAX_CREATOR_SIZE : MAX_USER_SIZE;
     if (fileSize > maxSize) {
-      console.warn(`[UPLOAD-INIT] ⚠️ File size ${fileSize} exceeds limit ${maxSize}`);
+      // console.warn(`[UPLOAD-INIT] ⚠️ File size ${fileSize} exceeds limit ${maxSize}`);
       return res.status(400).json({
         success: false,
         error: `File size exceeds limit. Max size: ${maxSize / (1024 * 1024 * 1024)}GB`,
@@ -130,7 +130,7 @@ router.post('/complete', authenticate, async (req: Request, res: Response) => {
     console.log(`[UPLOAD-COMPLETE] 🏁 Complete upload request for video: ${videoId}`);
 
     if (!videoId) {
-      console.warn(`[UPLOAD-COMPLETE] ⚠️ Missing videoId`);
+      // console.warn(`[UPLOAD-COMPLETE] ⚠️ Missing videoId`);
       return res.status(400).json({
         success: false,
         error: 'Missing videoId',
@@ -142,7 +142,7 @@ router.post('/complete', authenticate, async (req: Request, res: Response) => {
     const video = await Video.findOne({ videoId });
 
     if (!video) {
-      console.warn(`[UPLOAD-COMPLETE] ⚠️ Video not found: ${videoId}`);
+      // console.warn(`[UPLOAD-COMPLETE] ⚠️ Video not found: ${videoId}`);
       return res.status(404).json({
         success: false,
         error: 'Video not found',
@@ -153,7 +153,7 @@ router.post('/complete', authenticate, async (req: Request, res: Response) => {
 
     // Verify ownership
     if (video.userId !== currentUserId) {
-      console.warn(`[UPLOAD-COMPLETE] ⚠️ Unauthorized access attempt by user: ${currentUserId}`);
+      // console.warn(`[UPLOAD-COMPLETE] ⚠️ Unauthorized access attempt by user: ${currentUserId}`);
       return res.status(403).json({
         success: false,
         error: 'You are not authorized to complete this upload.',
@@ -161,7 +161,7 @@ router.post('/complete', authenticate, async (req: Request, res: Response) => {
     }
 
     if (video.status !== 'pending') {
-      console.warn(`[UPLOAD-COMPLETE] ⚠️ Invalid status: ${video.status}, expected: pending`);
+      // console.warn(`[UPLOAD-COMPLETE] ⚠️ Invalid status: ${video.status}, expected: pending`);
       return res.status(400).json({
         success: false,
         error: `Invalid video status: ${video.status}. Expected: pending`,
