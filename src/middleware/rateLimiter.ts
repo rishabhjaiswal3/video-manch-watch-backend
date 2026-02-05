@@ -15,7 +15,7 @@ export const apiLimiter = rateLimit({
 // Stricter limiter for auth endpoints (brute-force protection)
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10,
+  max: 100,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -27,7 +27,7 @@ export const authLimiter = rateLimit({
 // Upload rate limiter — 3 uploads per hour
 export const uploadLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 10,
+  max: 100,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
