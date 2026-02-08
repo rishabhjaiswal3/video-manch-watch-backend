@@ -270,10 +270,15 @@ router.get('/status/:videoId', authenticate, async (req: Request, res: Response)
       });
     }
 
-    // Get job status if processing
+    // Only query Redis for actively processing jobs (not queued/completed/failed)
+    // This reduces Redis calls significantly - queued videos don't need real-time status
     let jobStatus = null;
-    if (video.transcoding?.jobId && ['queued', 'processing'].includes(video.status)) {
-      jobStatus = await queueService.getJobStatus(video.videoId, video.userType);
+    if (video.transcoding?.jobId && video.status === 'processing') {
+      try {
+        jobStatus = await queueService.getJobStatus(video.videoId, video.userType);
+      } catch {
+        // Ignore Redis errors for status checks - use cached MongoDB data
+      }
     }
 
     return res.status(200).json({
@@ -368,23 +373,42 @@ router.get('/videos', authenticate, async (req: Request, res: Response) => {
   }
 });
 
+// Cache for queue stats to reduce Redis calls
+let statsCache: { data: unknown; timestamp: number } | null = null;
+const STATS_CACHE_TTL = 30000; // 30 seconds cache
+
 /**
  * GET /api/upload/queue-stats
- * Get queue statistics
+ * Get queue statistics (cached for 30 seconds to reduce Redis calls)
  */
-router.get('/queue-stats', authenticate, async (req: Request, res: Response) => {
+router.get('/queue-stats', authenticate, async (_req: Request, res: Response) => {
   try {
+    // Return cached stats if fresh
+    if (statsCache && Date.now() - statsCache.timestamp < STATS_CACHE_TTL) {
+      return res.status(200).json({
+        success: true,
+        data: statsCache.data,
+        cached: true,
+      });
+    }
+
     const [userStats, creatorStats] = await Promise.all([
       queueService.getQueueStats('user'),
       queueService.getQueueStats('creator'),
     ]);
 
+    const data = {
+      userQueue: userStats,
+      creatorQueue: creatorStats,
+    };
+
+    // Update cache
+    statsCache = { data, timestamp: Date.now() };
+
     return res.status(200).json({
       success: true,
-      data: {
-        userQueue: userStats,
-        creatorQueue: creatorStats,
-      },
+      data,
+      cached: false,
     });
   } catch (error) {
     console.error('Error getting queue stats:', error);
