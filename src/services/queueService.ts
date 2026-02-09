@@ -24,12 +24,9 @@ export const getQueues = () => {
           type: 'exponential',
           delay: 5000,
         },
-        removeOnComplete: {
-          age: 30 * 24 * 60 * 60, // 30 days in seconds
-        },
-        removeOnFail: {
-          count: 50,
-        },
+        // Remove jobs from Redis immediately - status is tracked in MongoDB
+        removeOnComplete: true,
+        removeOnFail: true,
       },
     });
   }
@@ -43,12 +40,9 @@ export const getQueues = () => {
           type: 'exponential',
           delay: 10000,
         },
-        removeOnComplete: {
-          age: 30 * 24 * 60 * 60, // 30 days in seconds
-        },
-        removeOnFail: {
-          count: 20,
-        },
+        // Remove jobs from Redis immediately - status is tracked in MongoDB
+        removeOnComplete: true,
+        removeOnFail: true,
       },
     });
   }

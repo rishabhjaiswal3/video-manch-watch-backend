@@ -322,10 +322,13 @@ router.get('/videos', authenticate, async (req: Request, res: Response) => {
     const limitNum = Math.min(100, Math.max(1, parseInt(limit as string, 10)));
     const skip = (pageNum - 1) * limitNum;
 
-    // Build query
+    // Build query - exclude deleted videos by default
     const query: Record<string, unknown> = { userId };
     if (status && typeof status === 'string') {
       query.status = status;
+    } else {
+      // By default, exclude deleted videos
+      query.status = { $ne: 'deleted' };
     }
 
     // Get videos and count
@@ -415,6 +418,285 @@ router.get('/queue-stats', authenticate, async (_req: Request, res: Response) =>
     return res.status(500).json({
       success: false,
       error: 'Failed to get queue stats',
+    });
+  }
+});
+
+/**
+ * POST /api/upload/retry/:videoId
+ * Restart transcoding for a failed video
+ */
+router.post('/retry/:videoId', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { videoId } = req.params;
+    const { userId: currentUserId } = ensureAuthenticatedUser(req);
+
+    console.log(`[UPLOAD-RETRY] 🔄 Retry request for video: ${videoId}`);
+
+    const video = await Video.findOne({ videoId });
+
+    if (!video) {
+      return res.status(404).json({
+        success: false,
+        error: 'Video not found',
+      });
+    }
+
+    // Verify ownership
+    if (video.userId !== currentUserId) {
+      return res.status(403).json({
+        success: false,
+        error: 'You are not authorized to retry this video.',
+      });
+    }
+
+    // Only allow retry for failed videos
+    if (video.status !== 'failed') {
+      return res.status(400).json({
+        success: false,
+        error: `Cannot retry video with status: ${video.status}. Only failed videos can be retried.`,
+      });
+    }
+
+    // Verify the original file still exists in R2
+    console.log(`[UPLOAD-RETRY] 🔍 Verifying original file exists in R2: ${video.originalFile.r2Key}`);
+    const fileExists = await r2Service.fileExists(R2_BUCKETS.RAW, video.originalFile.r2Key);
+
+    if (!fileExists) {
+      return res.status(400).json({
+        success: false,
+        error: 'Original file not found in storage. Please upload the video again.',
+      });
+    }
+
+    console.log(`[UPLOAD-RETRY] ✅ Original file verified`);
+
+    // Reset status and clear error
+    video.status = 'queued';
+    video.transcoding = {
+      progress: 0,
+      error: undefined,
+    };
+
+    // Add job to transcoding queue
+    const qualities = ['1080p', '720p', '480p', '360p', '240p'];
+
+    console.log(`[UPLOAD-RETRY] 🎬 Adding job to ${video.userType} transcoding queue...`);
+    const jobId = await queueService.addTranscodeJob({
+      videoId: video.videoId,
+      userId: video.userId,
+      userType: video.userType,
+      r2Key: video.originalFile.r2Key,
+      qualities,
+    });
+
+    video.transcoding.jobId = jobId;
+    await video.save();
+
+    console.log(`[UPLOAD-RETRY] ✅ Video re-queued with job ID: ${jobId}`);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        videoId: video.videoId,
+        status: video.status,
+        jobId,
+        message: 'Transcoding restarted successfully.',
+      },
+    });
+  } catch (error) {
+    console.error('[UPLOAD-RETRY] ❌ Error retrying transcoding:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to retry transcoding',
+    });
+  }
+});
+
+/**
+ * GET /api/upload/raw-url/:videoId
+ * Get a presigned URL for streaming the original (raw) video
+ */
+router.get('/raw-url/:videoId', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { videoId } = req.params;
+    const { userId: currentUserId } = ensureAuthenticatedUser(req);
+
+    const video = await Video.findOne({ videoId });
+
+    if (!video) {
+      return res.status(404).json({
+        success: false,
+        error: 'Video not found',
+      });
+    }
+
+    // Verify ownership
+    if (video.userId !== currentUserId) {
+      return res.status(403).json({
+        success: false,
+        error: 'You are not authorized to access this video.',
+      });
+    }
+
+    // Generate presigned URL for the original file (1 hour expiry)
+    console.log(`[RAW-URL] 🔑 Generating presigned URL for: ${video.originalFile.r2Key}`);
+    const rawUrl = await r2Service.getDownloadPresignedUrl(
+      R2_BUCKETS.RAW,
+      video.originalFile.r2Key,
+      3600 // 1 hour
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        videoId: video.videoId,
+        rawUrl,
+        expiresIn: 3600,
+        filename: video.originalFile.filename,
+        mimeType: video.originalFile.mimeType,
+      },
+    });
+  } catch (error) {
+    console.error('[RAW-URL] ❌ Error generating raw URL:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to generate raw video URL',
+    });
+  }
+});
+
+/**
+ * PATCH /api/upload/video/:videoId
+ * Update video details (title, description)
+ */
+router.patch('/video/:videoId', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { videoId } = req.params;
+    const { title, description } = req.body;
+    const { userId: currentUserId } = ensureAuthenticatedUser(req);
+
+    console.log(`[VIDEO-UPDATE] 📝 Update request for video: ${videoId}`);
+
+    const video = await Video.findOne({ videoId });
+
+    if (!video) {
+      return res.status(404).json({
+        success: false,
+        error: 'Video not found',
+      });
+    }
+
+    // Verify ownership
+    if (video.userId !== currentUserId) {
+      return res.status(403).json({
+        success: false,
+        error: 'You are not authorized to update this video.',
+      });
+    }
+
+    // Don't allow updates for deleted videos
+    if (video.status === 'deleted') {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot update a deleted video.',
+      });
+    }
+
+    // Update allowed fields
+    if (title !== undefined) {
+      video.title = title.trim();
+    }
+    if (description !== undefined) {
+      video.description = description.trim();
+    }
+
+    await video.save();
+
+    console.log(`[VIDEO-UPDATE] ✅ Video updated: ${videoId}`);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        videoId: video.videoId,
+        title: video.title,
+        description: video.description,
+        status: video.status,
+        updatedAt: video.updatedAt,
+      },
+    });
+  } catch (error) {
+    console.error('[VIDEO-UPDATE] ❌ Error updating video:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to update video',
+    });
+  }
+});
+
+/**
+ * DELETE /api/upload/video/:videoId
+ * Soft delete a video (changes status to 'deleted')
+ */
+router.delete('/video/:videoId', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { videoId } = req.params;
+    const { userId: currentUserId } = ensureAuthenticatedUser(req);
+
+    console.log(`[VIDEO-DELETE] 🗑️ Delete request for video: ${videoId}`);
+
+    const video = await Video.findOne({ videoId });
+
+    if (!video) {
+      return res.status(404).json({
+        success: false,
+        error: 'Video not found',
+      });
+    }
+
+    // Verify ownership
+    if (video.userId !== currentUserId) {
+      return res.status(403).json({
+        success: false,
+        error: 'You are not authorized to delete this video.',
+      });
+    }
+
+    // Already deleted
+    if (video.status === 'deleted') {
+      return res.status(400).json({
+        success: false,
+        error: 'Video is already deleted.',
+      });
+    }
+
+    // Don't allow deletion of videos that are currently processing
+    if (video.status === 'processing') {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot delete a video that is currently processing. Please wait for it to complete or fail.',
+      });
+    }
+
+    // Soft delete - just change status
+    video.status = 'deleted';
+    await video.save();
+
+    console.log(`[VIDEO-DELETE] ✅ Video soft deleted: ${videoId}`);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        videoId: video.videoId,
+        status: video.status,
+        message: 'Video deleted successfully.',
+      },
+    });
+  } catch (error) {
+    console.error('[VIDEO-DELETE] ❌ Error deleting video:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to delete video',
     });
   }
 });

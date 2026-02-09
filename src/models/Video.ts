@@ -35,7 +35,7 @@ export interface IVideo extends Document {
   };
 
   // Processing status
-  status: 'pending' | 'uploading' | 'queued' | 'processing' | 'completed' | 'failed';
+  status: 'pending' | 'uploading' | 'queued' | 'processing' | 'completed' | 'failed' | 'deleted';
 
   // Transcoding info
   transcoding?: {
@@ -158,7 +158,7 @@ const VideoSchema = new Schema<IVideo>(
 
     status: {
       type: String,
-      enum: ['pending', 'uploading', 'queued', 'processing', 'completed', 'failed'],
+      enum: ['pending', 'uploading', 'queued', 'processing', 'completed', 'failed', 'deleted'],
       default: 'pending',
       index: true,
     },
