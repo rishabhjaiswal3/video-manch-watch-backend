@@ -11,6 +11,7 @@ const ALLOWED_MIME_TYPES = [
 const MAX_USER_SIZE = 2 * 1024 * 1024 * 1024; // 2GB
 
 export const initUploadSchema = z.object({
+  videoId: z.string().uuid('Invalid video ID format').optional(),
   filename: z
     .string()
     .min(1, 'Filename is required')

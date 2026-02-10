@@ -36,6 +36,12 @@ export interface IVideo extends Document {
 
   // Processing status
   status: 'pending' | 'uploading' | 'queued' | 'processing' | 'completed' | 'failed' | 'deleted';
+  statusHistory?: Array<{
+    from: IVideo['status'];
+    to: IVideo['status'];
+    at: Date;
+    reason?: string;
+  }>;
 
   // Transcoding info
   transcoding?: {
@@ -91,6 +97,12 @@ export interface IVideo extends Document {
   isAdultContent?: boolean;
   isDownloadable?: boolean;
   showTitle?: boolean;
+
+  // Retry tracking
+  retryCount?: number;
+
+  // Presigned URL tracking
+  presignedUrlExpiresAt?: Date;
 
   // Webhook for completion notification
   webhookUrl?: string;
@@ -162,6 +174,14 @@ const VideoSchema = new Schema<IVideo>(
       default: 'pending',
       index: true,
     },
+    statusHistory: [
+      {
+        from: { type: String },
+        to: { type: String },
+        at: { type: Date, default: Date.now },
+        reason: { type: String },
+      },
+    ],
     transcoding: {
       jobId: { type: String },
       progress: { type: Number, default: 0 },
@@ -218,6 +238,12 @@ const VideoSchema = new Schema<IVideo>(
     isAdultContent: { type: Boolean, default: false },
     isDownloadable: { type: Boolean, default: false },
     showTitle: { type: Boolean, default: true },
+
+    // Retry tracking
+    retryCount: { type: Number, default: 0 },
+
+    // Presigned URL tracking
+    presignedUrlExpiresAt: { type: Date },
 
     // Webhook
     webhookUrl: { type: String },

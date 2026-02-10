@@ -23,13 +23,39 @@ const ALLOWED_MIME_TYPES = [
 const MAX_USER_SIZE = 2 * 1024 * 1024 * 1024; // 2GB
 const MAX_CREATOR_SIZE = 30 * 1024 * 1024 * 1024; // 30GB
 
+// Retry limits
+const MAX_UPLOAD_RETRIES = 3;
+const MAX_TRANSCODING_RETRIES = 3;
+
+// Statuses that allow re-upload
+const RETRYABLE_STATUSES = ['failed', 'pending'];
+
+const setStatusWithHistory = (
+  video: any,
+  to: 'pending' | 'uploading' | 'queued' | 'processing' | 'completed' | 'failed' | 'deleted',
+  reason?: string
+) => {
+  const from = video.status;
+  if (from === to) return;
+  if (!video.statusHistory) {
+    video.statusHistory = [];
+  }
+  video.statusHistory.push({
+    from,
+    to,
+    at: new Date(),
+    reason,
+  });
+  video.status = to;
+};
+
 /**
  * POST /api/upload/init
  * Initialize a video upload and get presigned URL for direct R2 upload
  */
 router.post('/init', authenticate, uploadLimiter as any, async (req: Request, res: Response) => {
   try {
-    const { filename, fileSize, mimeType, title, description } = req.body;
+    const { videoId: providedVideoId, filename, fileSize, mimeType, title, description } = req.body;
     const { userId, userType } = ensureAuthenticatedUser(req);
 
     console.log(`[UPLOAD-INIT] 🎬 New upload request from user: ${userId} (${userType})`);
@@ -54,7 +80,14 @@ router.post('/init', authenticate, uploadLimiter as any, async (req: Request, re
       });
     }
 
-    // Validate file size
+    // Validate file size - check for invalid values
+    if (typeof fileSize !== 'number' || !Number.isFinite(fileSize) || fileSize <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid file size. Must be a positive number.',
+      });
+    }
+
     const maxSize = userType === 'creator' ? MAX_CREATOR_SIZE : MAX_USER_SIZE;
     if (fileSize > maxSize) {
       // console.warn(`[UPLOAD-INIT] ⚠️ File size ${fileSize} exceeds limit ${maxSize}`);
@@ -64,9 +97,56 @@ router.post('/init', authenticate, uploadLimiter as any, async (req: Request, re
       });
     }
 
-    // Generate unique video ID
-    const videoId = uuidv4();
-    console.log(`[UPLOAD-INIT] 🆔 Generated video ID: ${videoId}`);
+    // Validate title length
+    const MAX_TITLE_LENGTH = 200;
+    if (title.length > MAX_TITLE_LENGTH) {
+      return res.status(400).json({
+        success: false,
+        error: `Title too long. Maximum ${MAX_TITLE_LENGTH} characters allowed.`,
+      });
+    }
+
+    let video = null;
+    let videoId = providedVideoId as string | undefined;
+
+    if (videoId) {
+      console.log(`[UPLOAD-INIT] 🔁 Reusing existing video ID: ${videoId}`);
+      video = await Video.findOne({ videoId });
+
+      if (!video) {
+        return res.status(404).json({
+          success: false,
+          error: 'Video not found for provided videoId',
+        });
+      }
+
+      if (video.userId !== userId) {
+        return res.status(403).json({
+          success: false,
+          error: 'You are not authorized to reuse this video.',
+        });
+      }
+
+      // Only allow retry for failed or pending videos
+      if (!RETRYABLE_STATUSES.includes(video.status)) {
+        return res.status(400).json({
+          success: false,
+          error: `Cannot retry video with status '${video.status}'. Only failed or pending videos can be retried.`,
+        });
+      }
+
+      // Check max retry limit
+      const currentRetryCount = video.retryCount || 0;
+      if (currentRetryCount >= MAX_UPLOAD_RETRIES) {
+        return res.status(400).json({
+          success: false,
+          error: `Maximum retry limit (${MAX_UPLOAD_RETRIES}) reached for this video. Please create a new upload.`,
+        });
+      }
+    } else {
+      videoId = uuidv4();
+      console.log(`[UPLOAD-INIT] 🆔 Generated video ID: ${videoId}`);
+    }
 
     // Get presigned URL for direct upload to R2
     console.log(`[UPLOAD-INIT] 🔑 Generating presigned URL for R2...`);
@@ -79,25 +159,70 @@ router.post('/init', authenticate, uploadLimiter as any, async (req: Request, re
     );
     console.log(`[UPLOAD-INIT] ✅ Presigned URL generated, key: ${presignedData.key}`);
 
-    // Create video document in MongoDB with pending status
-    console.log(`[UPLOAD-INIT] 💾 Creating video document in MongoDB...`);
-    const video = new Video({
-      videoId,
-      userId,
-      userType,
-      title,
-      description,
-      originalFile: {
+    // Calculate presigned URL expiration time
+    const presignedUrlExpiresAt = new Date(Date.now() + presignedData.expiresIn * 1000);
+
+    if (!video) {
+      // Create video document in MongoDB with pending status
+      console.log(`[UPLOAD-INIT] 💾 Creating video document in MongoDB...`);
+      video = new Video({
+        videoId,
+        userId,
+        userType,
+        title,
+        description,
+        originalFile: {
+          filename,
+          size: fileSize,
+          mimeType,
+          r2Key: presignedData.key,
+        },
+        status: 'pending',
+        presignedUrlExpiresAt,
+        retryCount: 0,
+        statusHistory: [
+          {
+            from: 'pending',
+            to: 'pending',
+            at: new Date(),
+            reason: 'upload-init',
+          },
+        ],
+      });
+
+      await video.save();
+      console.log(`[UPLOAD-INIT] ✅ Video document created with status: pending`);
+    } else {
+      console.log(`[UPLOAD-INIT] ♻️ Re-initializing existing video record (retry #${(video.retryCount || 0) + 1})...`);
+      // Reset status + fields for a fresh upload
+      setStatusWithHistory(video, 'pending', 'upload-reinit');
+      video.title = title;
+      video.description = description;
+      video.originalFile = {
         filename,
         size: fileSize,
         mimeType,
         r2Key: presignedData.key,
-      },
-      status: 'pending',
-    });
-
-    await video.save();
-    console.log(`[UPLOAD-INIT] ✅ Video document created with status: pending`);
+      };
+      video.transcoding = {
+        progress: 0,
+        error: undefined,
+        jobId: undefined,
+        startedAt: undefined,
+        completedAt: undefined,
+      };
+      video.transcodingCompleted = false;
+      video.outputs = [];
+      video.masterPlaylistUrl = undefined;
+      video.thumbnail = undefined;
+      video.thumbnails = [];
+      video.duration = undefined;
+      video.originalMetadata = undefined;
+      video.presignedUrlExpiresAt = presignedUrlExpiresAt;
+      video.retryCount = (video.retryCount || 0) + 1;
+      await video.save();
+      console.log(`[UPLOAD-INIT] ✅ Existing video reset to pending (retry count: ${video.retryCount})`);
+    }
     console.log(`[UPLOAD-INIT] 🎉 Upload initialization complete for video: ${videoId}`);
 
     return res.status(200).json({
@@ -168,15 +293,28 @@ router.post('/complete', authenticate, async (req: Request, res: Response) => {
       });
     }
 
+    // Check if presigned URL has expired
+    if (video.presignedUrlExpiresAt && new Date() > video.presignedUrlExpiresAt) {
+      console.warn(`[UPLOAD-COMPLETE] ⚠️ Presigned URL expired at ${video.presignedUrlExpiresAt}`);
+      return res.status(400).json({
+        success: false,
+        error: 'Upload URL has expired. Please re-initialize the upload to get a new URL.',
+      });
+    }
+
     // Verify the file exists in R2
     console.log(`[UPLOAD-COMPLETE] 🔍 Verifying file exists in R2: ${video.originalFile.r2Key}`);
     const fileExists = await r2Service.fileExists(R2_BUCKETS.RAW, video.originalFile.r2Key);
 
     if (!fileExists) {
+      // Check if URL expired to give better error message
+      const urlExpired = video.presignedUrlExpiresAt && new Date() > video.presignedUrlExpiresAt;
       console.error(`[UPLOAD-COMPLETE] ❌ File not found in R2: ${video.originalFile.r2Key}`);
       return res.status(400).json({
         success: false,
-        error: 'File not found in storage. Please upload the file first.',
+        error: urlExpired
+          ? 'Upload URL has expired and file was not uploaded. Please re-initialize the upload.'
+          : 'File not found in storage. Please upload the file first.',
       });
     }
 
@@ -192,7 +330,7 @@ router.post('/complete', authenticate, async (req: Request, res: Response) => {
 
     // Update video status to queued
     console.log(`[UPLOAD-COMPLETE] 💾 Updating video status to 'queued'...`);
-    video.status = 'queued';
+    setStatusWithHistory(video, 'queued', 'upload-complete');
     if (metadata) {
       video.originalFile.size = metadata.size;
     }
@@ -200,9 +338,11 @@ router.post('/complete', authenticate, async (req: Request, res: Response) => {
     console.log(`[UPLOAD-COMPLETE] ✅ Video status updated to 'queued'`);
 
     // Add job to transcoding queue
+    // Creators get all qualities including 1080p for premium content
+    // Regular users get max 720p to optimize storage and processing time
     const qualities = video.userType === 'creator'
       ? ['1080p', '720p', '480p', '360p', '240p']
-      : ['1080p', '720p', '480p', '360p', '240p'];
+      : ['720p', '480p', '360p', '240p'];
 
     console.log(`[UPLOAD-COMPLETE] 🎬 Adding job to ${video.userType} transcoding queue...`);
     console.log(`[UPLOAD-COMPLETE] 🎯 Qualities: ${qualities.join(', ')}`);
@@ -433,28 +573,68 @@ router.post('/retry/:videoId', authenticate, async (req: Request, res: Response)
 
     console.log(`[UPLOAD-RETRY] 🔄 Retry request for video: ${videoId}`);
 
-    const video = await Video.findOne({ videoId });
-
-    if (!video) {
-      return res.status(404).json({
-        success: false,
-        error: 'Video not found',
-      });
-    }
-
-    // Verify ownership
-    if (video.userId !== currentUserId) {
-      return res.status(403).json({
-        success: false,
-        error: 'You are not authorized to retry this video.',
-      });
-    }
-
-    // Only allow retry for failed videos
-    if (video.status !== 'failed') {
+    // First check if video exists and retry count hasn't exceeded limit
+    const existingCheck = await Video.findOne({ videoId });
+    if (existingCheck && (existingCheck.retryCount || 0) >= MAX_TRANSCODING_RETRIES) {
       return res.status(400).json({
         success: false,
-        error: `Cannot retry video with status: ${video.status}. Only failed videos can be retried.`,
+        error: `Maximum retry limit (${MAX_TRANSCODING_RETRIES}) reached for this video. Please re-upload the video.`,
+      });
+    }
+
+    // Use atomic findOneAndUpdate to prevent race conditions
+    // Only update if status is 'failed' and belongs to user
+    const video = await Video.findOneAndUpdate(
+      {
+        videoId,
+        userId: currentUserId,
+        status: 'failed',  // Atomic check - prevents double retry
+        $or: [
+          { retryCount: { $lt: MAX_TRANSCODING_RETRIES } },
+          { retryCount: { $exists: false } }
+        ]
+      },
+      {
+        $set: {
+          status: 'queued',
+          'transcoding.progress': 0,
+          'transcoding.error': undefined,
+        },
+        $push: {
+          statusHistory: {
+            from: 'failed',
+            to: 'queued',
+            at: new Date(),
+            reason: 'transcode-retry',
+          }
+        },
+        $inc: { retryCount: 1 }  // Track retry attempts
+      },
+      { new: true }  // Return the updated document
+    );
+
+    if (!video) {
+      // Need to distinguish between not found, not owned, and wrong status
+      const existingVideo = await Video.findOne({ videoId });
+
+      if (!existingVideo) {
+        return res.status(404).json({
+          success: false,
+          error: 'Video not found',
+        });
+      }
+
+      if (existingVideo.userId !== currentUserId) {
+        return res.status(403).json({
+          success: false,
+          error: 'You are not authorized to retry this video.',
+        });
+      }
+
+      // Status is not 'failed' - could be already retrying (race condition prevented!)
+      return res.status(400).json({
+        success: false,
+        error: `Cannot retry video with status: ${existingVideo.status}. Only failed videos can be retried.`,
       });
     }
 
@@ -463,6 +643,21 @@ router.post('/retry/:videoId', authenticate, async (req: Request, res: Response)
     const fileExists = await r2Service.fileExists(R2_BUCKETS.RAW, video.originalFile.r2Key);
 
     if (!fileExists) {
+      // Rollback status since file doesn't exist
+      await Video.findOneAndUpdate(
+        { videoId },
+        {
+          $set: { status: 'failed', 'transcoding.error': 'Original file not found' },
+          $push: {
+            statusHistory: {
+              from: 'queued',
+              to: 'failed',
+              at: new Date(),
+              reason: 'original-file-missing',
+            }
+          }
+        }
+      );
       return res.status(400).json({
         success: false,
         error: 'Original file not found in storage. Please upload the video again.',
@@ -471,15 +666,10 @@ router.post('/retry/:videoId', authenticate, async (req: Request, res: Response)
 
     console.log(`[UPLOAD-RETRY] ✅ Original file verified`);
 
-    // Reset status and clear error
-    video.status = 'queued';
-    video.transcoding = {
-      progress: 0,
-      error: undefined,
-    };
-
-    // Add job to transcoding queue
-    const qualities = ['1080p', '720p', '480p', '360p', '240p'];
+    // Add job to transcoding queue (use same quality rules as initial upload)
+    const qualities = video.userType === 'creator'
+      ? ['1080p', '720p', '480p', '360p', '240p']
+      : ['720p', '480p', '360p', '240p'];
 
     console.log(`[UPLOAD-RETRY] 🎬 Adding job to ${video.userType} transcoding queue...`);
     const jobId = await queueService.addTranscodeJob({
@@ -490,8 +680,11 @@ router.post('/retry/:videoId', authenticate, async (req: Request, res: Response)
       qualities,
     });
 
-    video.transcoding.jobId = jobId;
-    await video.save();
+    // Update with job ID
+    await Video.findOneAndUpdate(
+      { videoId },
+      { $set: { 'transcoding.jobId': jobId } }
+    );
 
     console.log(`[UPLOAD-RETRY] ✅ Video re-queued with job ID: ${jobId}`);
 
@@ -679,7 +872,7 @@ router.delete('/video/:videoId', authenticate, async (req: Request, res: Respons
     }
 
     // Soft delete - just change status
-    video.status = 'deleted';
+    setStatusWithHistory(video, 'deleted', 'user-delete');
     await video.save();
 
     console.log(`[VIDEO-DELETE] ✅ Video soft deleted: ${videoId}`);

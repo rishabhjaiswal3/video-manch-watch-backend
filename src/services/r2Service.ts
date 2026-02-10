@@ -2,6 +2,9 @@ import { PutObjectCommand, GetObjectCommand, HeadObjectCommand } from '@aws-sdk/
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { getR2Client, R2_BUCKETS } from '../config/r2.js';
 
+// Configurable presigned URL expiry (default: 1 hour)
+const PRESIGNED_URL_EXPIRY_SECONDS = parseInt(process.env.R2_PRESIGNED_URL_EXPIRY_SECONDS || '3600', 10);
+
 
 export interface PresignedUrlResponse {
   uploadUrl: string;
@@ -22,7 +25,7 @@ export const r2Service = {
   ): Promise<PresignedUrlResponse> {
     const client = getR2Client();
     const key = `${userType}/${userId}/${videoId}/original/${filename}`;
-    const expiresIn = 3600; // 1 hour
+    const expiresIn = PRESIGNED_URL_EXPIRY_SECONDS;
 
     console.log(`[R2] 🔑 Generating presigned upload URL`);
     console.log(`[R2] 📂 Bucket: ${R2_BUCKETS.RAW}, Key: ${key}`);
