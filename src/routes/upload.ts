@@ -462,7 +462,7 @@ router.get('/status/:videoId', authenticate, async (req: Request, res: Response)
 router.get('/videos', authenticate, async (req: Request, res: Response) => {
   try {
     const { userId } = ensureAuthenticatedUser(req);
-    const { status, page = '1', limit = '20' } = req.query;
+    const { status, contentType, page = '1', limit = '20' } = req.query;
 
     const pageNum = Math.max(1, parseInt(page as string, 10));
     const limitNum = Math.min(100, Math.max(1, parseInt(limit as string, 10)));
@@ -475,6 +475,11 @@ router.get('/videos', authenticate, async (req: Request, res: Response) => {
     } else {
       // By default, exclude deleted videos
       query.status = { $ne: 'deleted' };
+    }
+
+    // Filter by content type (vod, reel)
+    if (contentType && typeof contentType === 'string' && ['vod', 'reel'].includes(contentType)) {
+      query.contentType = contentType;
     }
 
     // Get videos and count
@@ -498,6 +503,8 @@ router.get('/videos', authenticate, async (req: Request, res: Response) => {
           thumbnail: video.thumbnail,
           duration: video.duration,
           outputs: video.outputs,
+          masterPlaylistUrl: video.masterPlaylistUrl,
+          contentType: video.contentType || 'vod',
           transcoding: {
             progress: video.transcoding?.progress || 0,
             error: video.transcoding?.error,
