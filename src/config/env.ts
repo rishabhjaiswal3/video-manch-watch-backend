@@ -30,6 +30,12 @@ interface EnvConfig {
   R2_ACCESS_KEY_ID: string;
   R2_SECRET_ACCESS_KEY: string;
   R2_PUBLIC_URL: string | undefined;
+
+  // Playback token / worker
+  PLAYBACK_TOKEN_SECRET: string;
+  PLAYBACK_TOKEN_TTL_SECONDS: number;
+  PLAYBACK_ALLOWED_ORIGINS: string;
+  PLAYBACK_WORKER_URL: string;
 }
 
 interface ValidationResult {
@@ -49,6 +55,7 @@ const REQUIRED_VARS = [
   'R2_ACCOUNT_ID',
   'R2_ACCESS_KEY_ID',
   'R2_SECRET_ACCESS_KEY',
+  'PLAYBACK_TOKEN_SECRET',
 ] as const;
 
 /**
@@ -61,6 +68,9 @@ const OPTIONAL_VARS: Record<string, string | number> = {
   REDIS_PORT: 6379,
   JWT_EXPIRES_IN: '15m',
   REFRESH_TOKEN_EXPIRES_IN: '7d',
+  PLAYBACK_TOKEN_TTL_SECONDS: 1800,
+  PLAYBACK_ALLOWED_ORIGINS: 'http://localhost:8080,http://localhost:5173,https://videomanch.com',
+  PLAYBACK_WORKER_URL: 'http://localhost:8787',
 };
 
 /**
@@ -90,7 +100,7 @@ function validateVar(name: string, value: string | undefined): { valid: boolean;
     }
   }
 
-  if ((name === 'JWT_SECRET' || name === 'REFRESH_TOKEN_SECRET') && value.length < 32) {
+  if ((name === 'JWT_SECRET' || name === 'REFRESH_TOKEN_SECRET' || name === 'PLAYBACK_TOKEN_SECRET') && value.length < 32) {
     return { valid: false, error: `${name} should be at least 32 characters for security` };
   }
 

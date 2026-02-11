@@ -9,6 +9,7 @@ import authRoutes from './routes/auth.js';
 import uploadRoutes from './routes/upload.js';
 import analyticsRoutes from './routes/analytics.js';
 import playbackRoutes from './routes/playback.js';
+import videosRoutes from './routes/videos.js';
 import { apiLimiter } from './middleware/rateLimiter.js';
 import { globalErrorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
@@ -78,6 +79,7 @@ app.use('/auth', authRoutes);
 app.use('/upload', uploadRoutes);
 app.use('/analytics', analyticsRoutes);
 app.use('/playback', playbackRoutes);
+app.use('/videos', videosRoutes);
 
 
 // 404 handler

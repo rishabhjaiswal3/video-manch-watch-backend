@@ -55,12 +55,16 @@ const setStatusWithHistory = (
  */
 router.post('/init', authenticate, uploadLimiter as any, async (req: Request, res: Response) => {
   try {
-    const { videoId: providedVideoId, filename, fileSize, mimeType, title, description } = req.body;
+    const { videoId: providedVideoId, filename, fileSize, mimeType, title, description, contentType } = req.body;
     const { userId, userType } = ensureAuthenticatedUser(req);
+
+    // Validate contentType (default to 'vod' if not provided)
+    const validContentTypes = ['vod', 'reel', 'live'];
+    const finalContentType = validContentTypes.includes(contentType) ? contentType : 'vod';
 
     console.log(`[UPLOAD-INIT] 🎬 New upload request from user: ${userId} (${userType})`);
     console.log(`[UPLOAD-INIT] 📄 File: ${filename}, Size: ${(fileSize / (1024 * 1024)).toFixed(2)} MB, Type: ${mimeType}`);
-    console.log(`[UPLOAD-INIT] 📝 Title: ${title}`);
+    console.log(`[UPLOAD-INIT] 📝 Title: ${title}, Content Type: ${finalContentType}`);
 
     // Validate required fields
     if (!filename || !fileSize || !mimeType || !title) {
@@ -171,6 +175,7 @@ router.post('/init', authenticate, uploadLimiter as any, async (req: Request, re
         userType,
         title,
         description,
+        contentType: finalContentType,
         originalFile: {
           filename,
           size: fileSize,
@@ -191,13 +196,14 @@ router.post('/init', authenticate, uploadLimiter as any, async (req: Request, re
       });
 
       await video.save();
-      console.log(`[UPLOAD-INIT] ✅ Video document created with status: pending`);
+      console.log(`[UPLOAD-INIT] ✅ Video document created with status: pending, contentType: ${finalContentType}`);
     } else {
       console.log(`[UPLOAD-INIT] ♻️ Re-initializing existing video record (retry #${(video.retryCount || 0) + 1})...`);
       // Reset status + fields for a fresh upload
       setStatusWithHistory(video, 'pending', 'upload-reinit');
       video.title = title;
       video.description = description;
+      video.contentType = finalContentType;
       video.originalFile = {
         filename,
         size: fileSize,
@@ -221,7 +227,7 @@ router.post('/init', authenticate, uploadLimiter as any, async (req: Request, re
       video.presignedUrlExpiresAt = presignedUrlExpiresAt;
       video.retryCount = (video.retryCount || 0) + 1;
       await video.save();
-      console.log(`[UPLOAD-INIT] ✅ Existing video reset to pending (retry count: ${video.retryCount})`);
+      console.log(`[UPLOAD-INIT] ✅ Existing video reset to pending (retry count: ${video.retryCount}), contentType: ${finalContentType}`);
     }
     console.log(`[UPLOAD-INIT] 🎉 Upload initialization complete for video: ${videoId}`);
 
