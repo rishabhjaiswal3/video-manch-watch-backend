@@ -2,12 +2,28 @@ import { Router, Request, Response } from 'express';
 import { VideoAnalytics, ActiveSession, IPlaybackEvent } from '../models/VideoAnalytics.js';
 import { Video } from '../models/Video.js';
 import { getNumericEnv } from '../config/env.js';
-import { generateSignedUrl } from '../utils/signedUrl.js';
+import { generateSignedUrl, verifySignedUrl } from '../utils/signedUrl.js';
+import { r2Service } from '../services/r2Service.js';
+import { R2_BUCKETS } from '../config/r2.js';
 
 const router = Router();
 
 // Token expiry time (1 hour by default, configurable)
 const TOKEN_EXPIRY_SECONDS = getNumericEnv('VIDEO_TOKEN_EXPIRY_SECONDS', 3600);
+const SEGMENT_BASE_URL = process.env.VIDEO_SEGMENT_BASE_URL || 'https://video-segment.videomanch.com';
+
+const normalizePath = (input: string) => {
+    if (!input) return '';
+    try {
+        if (input.startsWith('http://') || input.startsWith('https://')) {
+            const parsed = new URL(input);
+            return parsed.pathname.replace(/^\//, '');
+        }
+    } catch {
+        // fall through
+    }
+    return input.replace(/^\//, '');
+};
 
 // ==========================================
 // ANALYTICS CONFIGURATION (from .env)
@@ -454,19 +470,6 @@ router.get('/stream/:videoId', async (req: Request, res: Response) => {
         }
 
         // Generate signed URL for master playlist
-        const normalizePath = (input: string) => {
-            if (!input) return '';
-            try {
-                if (input.startsWith('http://') || input.startsWith('https://')) {
-                    const parsed = new URL(input);
-                    return parsed.pathname.replace(/^\//, '');
-                }
-            } catch {
-                // fall through
-            }
-            return input.replace(/^\//, '');
-        };
-
         const masterPlaylistPath = normalizePath(video.masterPlaylistUrl || '');
         if (!masterPlaylistPath) {
             return res.status(404).json({
@@ -477,7 +480,7 @@ router.get('/stream/:videoId', async (req: Request, res: Response) => {
 
         const signedMaster = generateSignedUrl({
             videoId,
-            path: masterPlaylistPath,
+            path: `playback/master/${videoId}`,
             expiresIn: TOKEN_EXPIRY_SECONDS,
         });
 
@@ -516,6 +519,87 @@ router.get('/stream/:videoId', async (req: Request, res: Response) => {
     } catch (error: any) {
         console.error('[PLAYBACK] ❌ Error generating signed URLs:', error);
         res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
+ * GET /api/playback/master/:videoId
+ * Returns rewritten master playlist with signed variant URLs
+ */
+router.get('/master/:videoId', async (req: Request, res: Response) => {
+    try {
+        const { videoId } = req.params;
+        const token = req.query.token as string | undefined;
+        const expires = req.query.expires as string | undefined;
+        const vid = req.query.vid as string | undefined;
+
+        if (!token || !expires || !vid) {
+            return res.status(403).send('Forbidden: Token required');
+        }
+
+        const isValid = verifySignedUrl(`playback/master/${videoId}`, videoId, token, parseInt(expires, 10));
+        if (!isValid) {
+            return res.status(403).send('Forbidden: Invalid or expired token');
+        }
+
+        const video = await Video.findOne({
+            videoId,
+            status: 'completed',
+        }).lean();
+
+        if (!video || !video.masterPlaylistUrl) {
+            return res.status(404).send('Playlist not found');
+        }
+
+        const masterKey = normalizePath(video.masterPlaylistUrl);
+        const baseDir = masterKey.substring(0, masterKey.lastIndexOf('/') + 1);
+
+        const downloadUrl = await r2Service.getDownloadPresignedUrl(
+            R2_BUCKETS.TRANSCODED,
+            masterKey,
+            60
+        );
+
+        const response = await fetch(downloadUrl);
+        if (!response.ok) {
+            return res.status(502).send('Failed to fetch master playlist');
+        }
+        const playlistText = await response.text();
+
+        const rewritten = playlistText
+            .split(/\r?\n/)
+            .map((line) => {
+                const trimmed = line.trim();
+                if (!trimmed || trimmed.startsWith('#')) return line;
+
+                let variantKey = trimmed;
+                try {
+                    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+                        const parsed = new URL(trimmed);
+                        variantKey = parsed.pathname.replace(/^\//, '');
+                    } else {
+                        variantKey = normalizePath(`${baseDir}${trimmed}`);
+                    }
+                } catch {
+                    variantKey = normalizePath(`${baseDir}${trimmed}`);
+                }
+
+                const signed = generateSignedUrl({
+                    videoId,
+                    path: variantKey,
+                    expiresIn: TOKEN_EXPIRY_SECONDS,
+                });
+
+                return `${SEGMENT_BASE_URL}/${signed.signedPath}`;
+            })
+            .join('\n');
+
+        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+        res.setHeader('Cache-Control', 'public, max-age=60');
+        return res.status(200).send(rewritten);
+    } catch (error) {
+        console.error('[PLAYBACK] ❌ Error serving master playlist:', error);
+        return res.status(500).send('Internal Server Error');
     }
 });
 
