@@ -1,6 +1,6 @@
 import type { Request } from 'express';
 
-export type UserType = 'user' | 'creator';
+export type UserType = 'user' | 'creator' | 'admin';
 
 export interface AuthenticatedUser {
   userId: string;

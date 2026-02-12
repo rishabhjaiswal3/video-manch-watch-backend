@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs';
 export interface IUser extends Document {
   email: string;
   password: string;
-  userType: 'user' | 'creator';
+  userType: 'user' | 'creator' | 'admin';
   refreshToken?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -28,7 +28,7 @@ const UserSchema = new Schema<IUser>(
     },
     userType: {
       type: String,
-      enum: ['user', 'creator'],
+      enum: ['user', 'creator', 'admin'],
       default: 'user',
     },
     refreshToken: {
