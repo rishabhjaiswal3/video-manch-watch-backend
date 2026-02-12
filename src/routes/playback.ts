@@ -1,8 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { VideoAnalytics, ActiveSession, IPlaybackEvent } from '../models/VideoAnalytics.js';
+import { Video } from '../models/Video.js';
 import { getNumericEnv } from '../config/env.js';
+import { generateSignedUrl } from '../utils/signedUrl.js';
 
 const router = Router();
+
+// Token expiry time (1 hour by default, configurable)
+const TOKEN_EXPIRY_SECONDS = getNumericEnv('VIDEO_TOKEN_EXPIRY_SECONDS', 3600);
 
 // ==========================================
 // ANALYTICS CONFIGURATION (from .env)
@@ -420,5 +425,82 @@ function formatDuration(seconds: number): string {
     if (minutes > 0) return `${minutes}m ${secs}s`;
     return `${secs}s`;
 }
+
+/**
+ * GET /api/playback/stream/:videoId
+ * Get signed streaming URLs for a video
+ *
+ * Returns signed URLs that expire after TOKEN_EXPIRY_SECONDS
+ * These URLs must be validated by Cloudflare Worker
+ */
+router.get('/stream/:videoId', async (req: Request, res: Response) => {
+    try {
+        const { videoId } = req.params;
+
+        // Find the video
+        const video = await Video.findOne({
+            videoId,
+            status: 'completed',
+        }).lean();
+
+        if (!video) {
+            return res.status(404).json({
+                success: false,
+                error: 'Video not found',
+            });
+        }
+
+        // Generate signed URL for master playlist
+        const masterPlaylistPath = video.masterPlaylistUrl || '';
+        if (!masterPlaylistPath) {
+            return res.status(404).json({
+                success: false,
+                error: 'Video has no playlist',
+            });
+        }
+
+        const signedMaster = generateSignedUrl({
+            videoId,
+            path: masterPlaylistPath,
+            expiresIn: TOKEN_EXPIRY_SECONDS,
+        });
+
+        // Generate signed URLs for each quality variant
+        const signedOutputs = (video.outputs || []).map(output => {
+            if (!output.playlistUrl) return null;
+
+            const signed = generateSignedUrl({
+                videoId,
+                path: output.playlistUrl,
+                expiresIn: TOKEN_EXPIRY_SECONDS,
+            });
+
+            return {
+                quality: output.quality,
+                signedPlaylistUrl: signed.signedPath,
+                expires: signed.expires,
+            };
+        }).filter(Boolean);
+
+        res.json({
+            success: true,
+            data: {
+                videoId,
+                title: video.title,
+                thumbnail: video.thumbnail,
+                duration: video.duration,
+                masterPlaylist: {
+                    signedUrl: signedMaster.signedPath,
+                    expires: signedMaster.expires,
+                    expiresIn: TOKEN_EXPIRY_SECONDS,
+                },
+                outputs: signedOutputs,
+            },
+        });
+    } catch (error: any) {
+        console.error('[PLAYBACK] ❌ Error generating signed URLs:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
 
 export default router;

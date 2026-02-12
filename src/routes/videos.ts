@@ -1,7 +1,25 @@
 import { Router, Request, Response } from 'express';
 import { Video } from '../models/Video.js';
+import { generateSignedUrl } from '../utils/signedUrl.js';
+import { getNumericEnv } from '../config/env.js';
 
 const router = Router();
+
+// Token expiry time (1 hour by default)
+const TOKEN_EXPIRY_SECONDS = getNumericEnv('VIDEO_TOKEN_EXPIRY_SECONDS', 3600);
+
+/**
+ * Helper to generate signed URL for a video
+ */
+function signVideoUrl(videoId: string, path: string | undefined): string | undefined {
+  if (!path) return undefined;
+  const signed = generateSignedUrl({
+    videoId,
+    path,
+    expiresIn: TOKEN_EXPIRY_SECONDS,
+  });
+  return signed.signedPath;
+}
 
 /**
  * GET /api/videos
@@ -126,6 +144,9 @@ router.get('/:videoId', async (req: Request, res: Response) => {
       });
     }
 
+    // Generate signed URL for immediate playback (no extra API call needed)
+    const signedMasterPlaylistUrl = signVideoUrl(video.videoId, video.masterPlaylistUrl);
+
     return res.status(200).json({
       success: true,
       data: {
@@ -137,6 +158,7 @@ router.get('/:videoId', async (req: Request, res: Response) => {
         thumbnails: video.thumbnails,
         duration: video.duration,
         masterPlaylistUrl: video.masterPlaylistUrl,
+        signedMasterPlaylistUrl, // ⚡ Pre-signed for fast playback
         outputs: video.outputs,
         contentType: video.contentType || 'vod',
         tags: video.tags,
@@ -146,6 +168,7 @@ router.get('/:videoId', async (req: Request, res: Response) => {
         channelAvatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${video.userId}`,
         views: '0 views',
         timestamp: formatTimeAgo(video.createdAt),
+        tokenExpiresIn: TOKEN_EXPIRY_SECONDS,
       },
     });
   } catch (error) {
@@ -196,12 +219,14 @@ router.get('/type/reels', async (req: Request, res: Response) => {
           tags: reel.tags || [],
           thumbnail: reel.thumbnail,
           masterPlaylistUrl: reel.masterPlaylistUrl,
+          signedMasterPlaylistUrl: signVideoUrl(reel.videoId, reel.masterPlaylistUrl), // ⚡ Pre-signed
           likes: 0,
           comments: 0,
           shares: 0,
           bookmarks: 0,
           duration: formatDuration(reel.duration || 0),
         })),
+        tokenExpiresIn: TOKEN_EXPIRY_SECONDS,
         pagination: {
           page: pageNum,
           limit: limitNum,
