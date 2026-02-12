@@ -209,7 +209,7 @@ router.post('/logout', authenticate, async (req: Request, res: Response) => {
 
 // --- Helpers ---
 
-function generateAccessToken(userId: string, email: string, userType: 'user' | 'creator'): string {
+function generateAccessToken(userId: string, email: string, userType: 'user' | 'creator' | 'admin'): string {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error('JWT_SECRET is not defined');
 
@@ -222,7 +222,7 @@ function generateAccessToken(userId: string, email: string, userType: 'user' | '
   );
 }
 
-function generateRefreshToken(userId: string, email: string, userType: 'user' | 'creator'): string {
+function generateRefreshToken(userId: string, email: string, userType: 'user' | 'creator' | 'admin'): string {
   const secret = process.env.REFRESH_TOKEN_SECRET;
   if (!secret) throw new Error('REFRESH_TOKEN_SECRET is not defined');
 

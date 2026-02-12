@@ -21,7 +21,7 @@ export const r2Service = {
     videoId: string,
     filename: string,
     contentType: string,
-    userType: 'user' | 'creator' = 'user'
+    userType: 'user' | 'creator' | 'admin' = 'user'
   ): Promise<PresignedUrlResponse> {
     const client = getR2Client();
     const key = `${userType}/${userId}/${videoId}/original/${filename}`;
