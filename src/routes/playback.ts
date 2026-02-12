@@ -454,7 +454,20 @@ router.get('/stream/:videoId', async (req: Request, res: Response) => {
         }
 
         // Generate signed URL for master playlist
-        const masterPlaylistPath = video.masterPlaylistUrl || '';
+        const normalizePath = (input: string) => {
+            if (!input) return '';
+            try {
+                if (input.startsWith('http://') || input.startsWith('https://')) {
+                    const parsed = new URL(input);
+                    return parsed.pathname.replace(/^\//, '');
+                }
+            } catch {
+                // fall through
+            }
+            return input.replace(/^\//, '');
+        };
+
+        const masterPlaylistPath = normalizePath(video.masterPlaylistUrl || '');
         if (!masterPlaylistPath) {
             return res.status(404).json({
                 success: false,
@@ -474,7 +487,7 @@ router.get('/stream/:videoId', async (req: Request, res: Response) => {
 
             const signed = generateSignedUrl({
                 videoId,
-                path: output.playlistUrl,
+                path: normalizePath(output.playlistUrl),
                 expiresIn: TOKEN_EXPIRY_SECONDS,
             });
 
