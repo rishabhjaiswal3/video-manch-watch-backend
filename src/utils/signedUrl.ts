@@ -25,11 +25,15 @@ export interface SignedUrlResult {
 export function generateSignedUrl(params: SignedUrlParams): SignedUrlResult {
   const { videoId, path, expiresIn = DEFAULT_EXPIRY_SECONDS } = params;
 
+  console.log('[SIGNED-URL] 🔐 Generating signed URL:', { videoId, path, expiresIn });
+  console.log('[SIGNED-URL] 🔑 Using secret (first 8 chars):', SIGNING_SECRET.substring(0, 8) + '...');
+
   // Calculate expiration timestamp
   const expires = Math.floor(Date.now() / 1000) + expiresIn;
 
   // Create the string to sign: path|videoId|expires
   const dataToSign = `${path}|${videoId}|${expires}`;
+  console.log('[SIGNED-URL] 📝 Data to sign:', dataToSign);
 
   // Generate HMAC-SHA256 token
   const token = crypto
@@ -40,6 +44,9 @@ export function generateSignedUrl(params: SignedUrlParams): SignedUrlResult {
   // Construct signed path with query params
   const separator = path.includes('?') ? '&' : '?';
   const signedPath = `${path}${separator}token=${token}&expires=${expires}&vid=${videoId}`;
+
+  console.log('[SIGNED-URL] ✅ Generated token:', token.substring(0, 16) + '...');
+  console.log('[SIGNED-URL] 🔗 Signed path:', signedPath);
 
   return {
     signedPath,

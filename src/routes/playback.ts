@@ -434,14 +434,17 @@ function formatDuration(seconds: number): string {
  * These URLs must be validated by Cloudflare Worker
  */
 router.get('/stream/:videoId', async (req: Request, res: Response) => {
+    console.log('[PLAYBACK] 🎬 Stream request received for videoId:', req.params.videoId);
     try {
         const { videoId } = req.params;
 
         // Find the video
+        console.log('[PLAYBACK] 🔍 Looking up video in database...');
         const video = await Video.findOne({
             videoId,
             status: 'completed',
         }).lean();
+        console.log('[PLAYBACK] 📋 Video found:', video ? 'Yes' : 'No');
 
         if (!video) {
             return res.status(404).json({
