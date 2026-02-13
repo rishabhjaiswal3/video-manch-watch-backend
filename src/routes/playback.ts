@@ -1,16 +1,23 @@
 import { Router, Request, Response } from 'express';
 import { VideoAnalytics, ActiveSession, IPlaybackEvent } from '../models/VideoAnalytics.js';
+import { UserWatchHistory } from '../models/UserAnalytics.js';
 import { Video } from '../models/Video.js';
 import { getNumericEnv } from '../config/env.js';
 import { generateSignedUrl, verifySignedUrl } from '../utils/signedUrl.js';
 import { r2Service } from '../services/r2Service.js';
 import { R2_BUCKETS } from '../config/r2.js';
+import {
+    pushEventsToRedis,
+    updateActiveSession,
+    removeActiveSession,
+} from '../services/analyticsWorker.js';
 
 const router = Router();
 
 // Token expiry time (1 hour by default, configurable)
 const TOKEN_EXPIRY_SECONDS = getNumericEnv('VIDEO_TOKEN_EXPIRY_SECONDS', 3600);
 const SEGMENT_BASE_URL = process.env.VIDEO_SEGMENT_BASE_URL || 'https://video-segment.videomanch.com';
+const DEFAULT_ANALYTICS_DAYS = getNumericEnv('ANALYTICS_DEFAULT_DAYS', 7);
 
 const normalizePath = (input: string) => {
     if (!input) return '';
@@ -25,162 +32,27 @@ const normalizePath = (input: string) => {
     return input.replace(/^\//, '');
 };
 
+function formatDuration(seconds: number): string {
+    if (seconds === 0) return '0s';
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    if (minutes > 0) return `${minutes}m ${secs}s`;
+    return `${secs}s`;
+}
+
 // ==========================================
-// ANALYTICS CONFIGURATION (from .env)
+// EVENTS API — Receives player events, pushes to Redis
 // ==========================================
-const FLUSH_INTERVAL_MS = getNumericEnv('ANALYTICS_FLUSH_INTERVAL_MS', 60000);
-const FLUSH_CHECK_MS = getNumericEnv('ANALYTICS_FLUSH_CHECK_MS', 10000);
-const MAX_LIVE_VIDEOS = getNumericEnv('ANALYTICS_MAX_LIVE_VIDEOS', 20);
-const DEFAULT_ANALYTICS_DAYS = getNumericEnv('ANALYTICS_DEFAULT_DAYS', 7);
-
-// In-memory buffer for batch processing (reduces DB writes)
-interface EventBuffer {
-    [videoId: string]: {
-        plays: number;
-        pauses: number;
-        seeks: number;
-        buffers: number;
-        errors: number;
-        watchTime: number;
-        completionRates: number[];
-        qualities: Record<string, number>;
-        sessions: Set<string>;
-    };
-}
-
-let eventBuffer: EventBuffer = {};
-let lastFlush = Date.now();
-
-/**
- * Flush buffered events to MongoDB
- */
-async function flushBuffer(): Promise<void> {
-    if (Object.keys(eventBuffer).length === 0) return;
-
-    const today = new Date().toISOString().split('T')[0];
-    const bufferCopy = eventBuffer;
-    eventBuffer = {};
-
-    console.log('[PLAYBACK-ANALYTICS] 📊 Flushing', Object.keys(bufferCopy).length, 'video stats to DB');
-
-    for (const [videoId, stats] of Object.entries(bufferCopy)) {
-        try {
-            const avgCompletionRate = stats.completionRates.length > 0
-                ? stats.completionRates.reduce((a, b) => a + b, 0) / stats.completionRates.length
-                : 0;
-
-            await VideoAnalytics.findOneAndUpdate(
-                { videoId, date: today },
-                {
-                    $inc: {
-                        views: stats.sessions.size,
-                        totalPlays: stats.plays,
-                        totalPauses: stats.pauses,
-                        totalSeeks: stats.seeks,
-                        bufferingEvents: stats.buffers,
-                        errorCount: stats.errors,
-                        totalWatchTime: stats.watchTime,
-                        'qualityStats.1080p': stats.qualities['1080p'] || 0,
-                        'qualityStats.720p': stats.qualities['720p'] || 0,
-                        'qualityStats.480p': stats.qualities['480p'] || 0,
-                        'qualityStats.360p': stats.qualities['360p'] || 0,
-                        'qualityStats.auto': stats.qualities['auto'] || 0,
-                    },
-                    $addToSet: {
-                        sessions: { $each: Array.from(stats.sessions) },
-                    },
-                    $set: {
-                        avgCompletionRate: avgCompletionRate,
-                        avgWatchTime: stats.sessions.size > 0 ? stats.watchTime / stats.sessions.size : 0,
-                    },
-                },
-                { upsert: true, new: true }
-            );
-        } catch (error) {
-            console.error('[PLAYBACK-ANALYTICS] ❌ Failed to flush stats for video:', videoId, error);
-        }
-    }
-
-    console.log('[PLAYBACK-ANALYTICS] ✅ Buffer flushed successfully');
-}
-
-// Start periodic flush using configurable intervals
-setInterval(() => {
-    if (Date.now() - lastFlush >= FLUSH_INTERVAL_MS) {
-        flushBuffer();
-        lastFlush = Date.now();
-    }
-}, FLUSH_CHECK_MS);
-
-/**
- * Process a single playback event
- */
-function processEvent(event: IPlaybackEvent): void {
-    const { videoId, sessionId, type, data } = event;
-
-    // Initialize buffer for this video if needed
-    if (!eventBuffer[videoId]) {
-        eventBuffer[videoId] = {
-            plays: 0,
-            pauses: 0,
-            seeks: 0,
-            buffers: 0,
-            errors: 0,
-            watchTime: 0,
-            completionRates: [],
-            qualities: {},
-            sessions: new Set(),
-        };
-    }
-
-    const stats = eventBuffer[videoId];
-    stats.sessions.add(sessionId);
-
-    switch (type) {
-        case 'play':
-            stats.plays++;
-            break;
-        case 'pause':
-            stats.pauses++;
-            if (data.watchTime) {
-                stats.watchTime += data.watchTime;
-            }
-            break;
-        case 'seek':
-            stats.seeks++;
-            break;
-        case 'buffer':
-            stats.buffers++;
-            break;
-        case 'error':
-            stats.errors++;
-            break;
-        case 'quality_change':
-            if (data.quality) {
-                stats.qualities[data.quality] = (stats.qualities[data.quality] || 0) + 1;
-            }
-            break;
-        case 'ended':
-            if (data.completionRate) {
-                stats.completionRates.push(data.completionRate);
-            }
-            if (data.watchTime) {
-                stats.watchTime += data.watchTime;
-            }
-            break;
-        case 'heartbeat':
-            if (data.quality) {
-                stats.qualities[data.quality] = (stats.qualities[data.quality] || 0) + 1;
-            }
-            break;
-    }
-}
 
 /**
  * POST /api/playback/events
- * Receive batch of playback events from player
- * 
- * Lightweight - just buffers in memory, flushes periodically
+ * Receive batch of playback events from player/website
+ *
+ * Events are pushed to Redis for processing by the analytics worker.
+ * Active sessions are updated in real-time (not batched).
  */
 router.post('/events', async (req: Request, res: Response) => {
     try {
@@ -190,49 +62,45 @@ router.post('/events', async (req: Request, res: Response) => {
             return res.status(400).json({ success: false, error: 'events array required' });
         }
 
-        // Process events in memory (very fast)
+        // Filter valid events
+        const validEvents: IPlaybackEvent[] = [];
         for (const event of events) {
             if (event.videoId && event.sessionId && event.type) {
-                processEvent(event as IPlaybackEvent);
-
-                // Update active session for heartbeats
-                if (event.type === 'heartbeat' || event.type === 'play') {
-                    ActiveSession.findOneAndUpdate(
-                        { sessionId: event.sessionId },
-                        {
-                            $set: {
-                                videoId: event.videoId,
-                                userId: event.userId,
-                                quality: event.data?.quality || 'auto',
-                                watchTime: event.data?.watchTime || 0,
-                                currentTime: event.data?.currentTime || 0,
-                                lastHeartbeat: new Date(),
-                            },
-                            $setOnInsert: {
-                                startedAt: new Date(),
-                            },
-                        },
-                        { upsert: true }
-                    ).exec().catch(err => {
-                        // Fire and forget - don't block response
-                        console.error('[PLAYBACK-ANALYTICS] Session update failed:', err.message);
-                    });
-                }
-
-                // Remove session on ended/pause
-                if (event.type === 'ended') {
-                    ActiveSession.deleteOne({ sessionId: event.sessionId }).exec().catch(() => { });
-                }
+                validEvents.push(event as IPlaybackEvent);
             }
         }
 
-        // Return immediately (non-blocking)
-        res.status(200).json({ success: true, received: events.length });
+        if (validEvents.length === 0) {
+            return res.status(200).json({ success: true, received: 0 });
+        }
+
+        // Push to Redis queue (fast — non-blocking)
+        const pushed = await pushEventsToRedis(validEvents);
+        console.log(`[PLAYBACK] 📥 Pushed ${pushed} events to Redis`);
+
+        // Update active sessions in real-time (for live viewer counts)
+        // These are fire-and-forget — don't block the response
+        for (const event of validEvents) {
+            if (event.type === 'heartbeat' || event.type === 'play' || event.type === 'watchtime') {
+                updateActiveSession(event).catch(() => { });
+            }
+
+            if (event.type === 'ended') {
+                removeActiveSession(event.sessionId).catch(() => { });
+            }
+        }
+
+        // Return immediately
+        res.status(200).json({ success: true, received: validEvents.length });
     } catch (error: any) {
-        console.error('[PLAYBACK-ANALYTICS] ❌ Error processing events:', error);
+        console.error('[PLAYBACK] ❌ Error processing events:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
+
+// ==========================================
+// ANALYTICS QUERY APIs
+// ==========================================
 
 /**
  * GET /api/playback/stats/:videoId
@@ -288,7 +156,7 @@ router.get('/stats/:videoId', async (req: Request, res: Response) => {
             },
         });
     } catch (error: any) {
-        console.error('[PLAYBACK-ANALYTICS] ❌ Error fetching stats:', error);
+        console.error('[PLAYBACK] ❌ Error fetching stats:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -318,7 +186,7 @@ router.get('/concurrent/:videoId', async (req: Request, res: Response) => {
             },
         });
     } catch (error: any) {
-        console.error('[PLAYBACK-ANALYTICS] ❌ Error fetching concurrent:', error);
+        console.error('[PLAYBACK] ❌ Error fetching concurrent:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -339,7 +207,7 @@ router.get('/live', async (req: Request, res: Response) => {
                 },
             },
             { $sort: { viewers: -1 } },
-            { $limit: MAX_LIVE_VIDEOS },
+            { $limit: 20 },
         ]);
 
         const totalViewers = await ActiveSession.countDocuments();
@@ -356,7 +224,7 @@ router.get('/live', async (req: Request, res: Response) => {
             },
         });
     } catch (error: any) {
-        console.error('[PLAYBACK-ANALYTICS] ❌ Error fetching live stats:', error);
+        console.error('[PLAYBACK] ❌ Error fetching live stats:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -426,35 +294,168 @@ router.get('/overview', async (req: Request, res: Response) => {
             },
         });
     } catch (error: any) {
-        console.error('[PLAYBACK-ANALYTICS] ❌ Error fetching overview:', error);
+        console.error('[PLAYBACK] ❌ Error fetching overview:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
-function formatDuration(seconds: number): string {
-    if (seconds === 0) return '0s';
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
+// ==========================================
+// USER WATCH HISTORY APIs
+// ==========================================
 
-    if (hours > 0) return `${hours}h ${minutes}m`;
-    if (minutes > 0) return `${minutes}m ${secs}s`;
-    return `${secs}s`;
-}
+/**
+ * GET /api/playback/user/:userId/history
+ * Get a user's watch history (recently watched videos)
+ */
+router.get('/user/:userId/history', async (req: Request, res: Response) => {
+    try {
+        const { userId } = req.params;
+        const { page = 1, limit = 20 } = req.query;
+
+        const skip = (Number(page) - 1) * Number(limit);
+
+        const [history, total] = await Promise.all([
+            UserWatchHistory.find({ userId })
+                .sort({ lastWatchedAt: -1 })
+                .skip(skip)
+                .limit(Number(limit))
+                .lean(),
+            UserWatchHistory.countDocuments({ userId }),
+        ]);
+
+        res.json({
+            success: true,
+            data: {
+                history: history.map(h => ({
+                    videoId: h.videoId,
+                    totalWatchTime: h.totalWatchTime,
+                    lastWatchedPosition: h.lastWatchedPosition,
+                    maxWatchedPosition: h.maxWatchedPosition,
+                    videoDuration: h.videoDuration,
+                    completionRate: h.completionRate,
+                    isCompleted: h.isCompleted,
+                    totalSessions: h.totalSessions,
+                    lastQuality: h.lastQuality,
+                    videoType: h.videoType,
+                    firstWatchedAt: h.firstWatchedAt,
+                    lastWatchedAt: h.lastWatchedAt,
+                })),
+                pagination: {
+                    page: Number(page),
+                    limit: Number(limit),
+                    total,
+                    totalPages: Math.ceil(total / Number(limit)),
+                },
+            },
+        });
+    } catch (error: any) {
+        console.error('[PLAYBACK] ❌ Error fetching user history:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
+ * GET /api/playback/user/:userId/continue
+ * Get videos the user started but hasn't finished (for "Continue Watching")
+ */
+router.get('/user/:userId/continue', async (req: Request, res: Response) => {
+    try {
+        const { userId } = req.params;
+        const { limit = 10 } = req.query;
+
+        const continueWatching = await UserWatchHistory.find({
+            userId,
+            isCompleted: false,
+            completionRate: { $gt: 5 },  // Watched at least 5%
+        })
+            .sort({ lastWatchedAt: -1 })
+            .limit(Number(limit))
+            .lean();
+
+        res.json({
+            success: true,
+            data: {
+                videos: continueWatching.map(h => ({
+                    videoId: h.videoId,
+                    resumePosition: h.lastWatchedPosition,
+                    completionRate: h.completionRate,
+                    videoDuration: h.videoDuration,
+                    totalWatchTime: h.totalWatchTime,
+                    videoType: h.videoType,
+                    lastWatchedAt: h.lastWatchedAt,
+                })),
+            },
+        });
+    } catch (error: any) {
+        console.error('[PLAYBACK] ❌ Error fetching continue watching:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
+ * GET /api/playback/user/:userId/stats
+ * Get a user's overall watching statistics
+ */
+router.get('/user/:userId/stats', async (req: Request, res: Response) => {
+    try {
+        const { userId } = req.params;
+
+        const [summary, recentHistory] = await Promise.all([
+            // Note: We import UserAnalyticsSummary here to avoid circular deps
+            (await import('../models/UserAnalytics.js')).UserAnalyticsSummary.findOne({ userId }).lean(),
+            UserWatchHistory.find({ userId })
+                .sort({ lastWatchedAt: -1 })
+                .limit(5)
+                .lean(),
+        ]);
+
+        res.json({
+            success: true,
+            data: {
+                userId,
+                stats: summary ? {
+                    totalWatchTime: summary.totalWatchTime,
+                    totalWatchTimeFormatted: formatDuration(summary.totalWatchTime),
+                    totalVideosWatched: summary.totalVideosWatched,
+                    totalReelsWatched: summary.totalReelsWatched,
+                    totalCompletedVideos: summary.totalCompletedVideos,
+                    totalSessions: summary.totalSessions,
+                    todayWatchTime: summary.todayWatchTime,
+                    todayWatchTimeFormatted: formatDuration(summary.todayWatchTime),
+                    currentStreak: summary.currentStreak,
+                    longestStreak: summary.longestStreak,
+                    preferredQuality: summary.preferredQuality,
+                    avgSessionDuration: summary.avgSessionDuration,
+                    lastActiveDate: summary.lastActiveDate,
+                } : null,
+                recentlyWatched: recentHistory.map(h => ({
+                    videoId: h.videoId,
+                    completionRate: h.completionRate,
+                    totalWatchTime: h.totalWatchTime,
+                    lastWatchedAt: h.lastWatchedAt,
+                    videoType: h.videoType,
+                })),
+            },
+        });
+    } catch (error: any) {
+        console.error('[PLAYBACK] ❌ Error fetching user stats:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ==========================================
+// SIGNED STREAMING URLs
+// ==========================================
 
 /**
  * GET /api/playback/stream/:videoId
  * Get signed streaming URLs for a video
- *
- * Returns signed URLs that expire after TOKEN_EXPIRY_SECONDS
- * These URLs must be validated by Cloudflare Worker
  */
 router.get('/stream/:videoId', async (req: Request, res: Response) => {
     console.log('[PLAYBACK] 🎬 Stream request received for videoId:', req.params.videoId);
     try {
         const { videoId } = req.params;
 
-        // Find the video
         console.log('[PLAYBACK] 🔍 Looking up video in database...');
         const video = await Video.findOne({
             videoId,
@@ -469,7 +470,6 @@ router.get('/stream/:videoId', async (req: Request, res: Response) => {
             });
         }
 
-        // Generate signed URL for master playlist
         const masterPlaylistPath = normalizePath(video.masterPlaylistUrl || '');
         if (!masterPlaylistPath) {
             return res.status(404).json({
@@ -484,7 +484,6 @@ router.get('/stream/:videoId', async (req: Request, res: Response) => {
             expiresIn: TOKEN_EXPIRY_SECONDS,
         });
 
-        // Generate signed URLs for each quality variant
         const signedOutputs = (video.outputs || []).map(output => {
             if (!output.playlistUrl) return null;
 

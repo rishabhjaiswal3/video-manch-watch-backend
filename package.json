@@ -5,8 +5,11 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "dev:worker": "tsx watch src/worker.ts",
+    "dev:all": "npx -y concurrently \"npm run dev\" \"npm run dev:worker\"",
     "build": "tsc",
     "start": "node dist/index.js",
+    "start:worker": "node dist/worker.js",
     "worker": "tsx src/workers/transcodeWorker.ts",
     "seed:admin": "tsx scripts/seedAdmin.ts"
   },

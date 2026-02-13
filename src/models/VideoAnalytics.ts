@@ -4,7 +4,7 @@ import mongoose, { Schema, Document } from 'mongoose';
  * Playback Event - Individual event from player
  */
 export interface IPlaybackEvent {
-    type: 'play' | 'pause' | 'seek' | 'quality_change' | 'buffer' | 'ended' | 'error' | 'heartbeat';
+    type: 'play' | 'pause' | 'seek' | 'quality_change' | 'buffer' | 'ended' | 'error' | 'heartbeat' | 'watchtime';
     videoId: string;
     userId?: string;
     sessionId: string;
@@ -24,6 +24,7 @@ export interface IPlaybackEvent {
         errorMessage?: string;
         watchTime?: number;
         completionRate?: number;
+        videoType?: string;
     };
 }
 

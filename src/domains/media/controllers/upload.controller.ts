@@ -1,0 +1,174 @@
+import { Request, Response } from 'express';
+import { UploadService } from '../services/upload.service.js';
+import { ensureAuthenticatedUser } from '../../../utils/authHelpers.js';
+
+const uploadService = new UploadService();
+
+export class UploadController {
+
+    /**
+     * Initialize upload
+     */
+    async init(req: Request, res: Response) {
+        try {
+            const { videoId, filename, fileSize, mimeType, title, description, contentType } = req.body;
+            const { userId, userType } = ensureAuthenticatedUser(req);
+
+            const result = await uploadService.initializeUpload(userId, userType, {
+                filename,
+                fileSize,
+                mimeType,
+                title,
+                description,
+                contentType,
+                videoId,
+            });
+
+            return res.status(200).json({ success: true, data: result });
+        } catch (error: any) {
+            console.error('[UPLOAD-INIT] Error:', error);
+            const status = error.message.includes('not found') ? 404 : 400;
+            return res.status(status).json({ success: false, error: error.message });
+        }
+    }
+
+    /**
+     * Complete upload
+     */
+    async complete(req: Request, res: Response) {
+        try {
+            const { videoId } = req.body;
+            const { userId } = ensureAuthenticatedUser(req);
+
+            const result = await uploadService.completeUpload(userId, videoId);
+
+            return res.status(200).json({ success: true, data: result });
+        } catch (error: any) {
+            console.error('[UPLOAD-COMPLETE] Error:', error);
+            const status = error.message.includes('Unauthorized') ? 403 : 400;
+            return res.status(status).json({ success: false, error: error.message });
+        }
+    }
+
+    /**
+     * Get status
+     */
+    async getStatus(req: Request, res: Response) {
+        try {
+            const { videoId } = req.params;
+            const { userId } = ensureAuthenticatedUser(req);
+
+            const result = await uploadService.getStatus(userId, videoId);
+
+            if (!result) return res.status(404).json({ success: false, error: 'Video not found' });
+
+            return res.status(200).json({ success: true, data: result });
+        } catch (error: any) {
+            console.error('[UPLOAD-STATUS] Error:', error);
+            const status = error.message.includes('Unauthorized') ? 403 : 500;
+            return res.status(status).json({ success: false, error: error.message });
+        }
+    }
+
+    /**
+     * List videos
+     */
+    async listVideos(req: Request, res: Response) {
+        try {
+            const { userId } = ensureAuthenticatedUser(req);
+            const page = parseInt(req.query.page as string) || 1;
+            const limit = parseInt(req.query.limit as string) || 20;
+            const status = req.query.status as string;
+            const contentType = req.query.contentType as string;
+
+            const result = await uploadService.listCreatorVideos(userId, { page, limit, status, contentType });
+
+            return res.status(200).json({ success: true, data: result });
+        } catch (error: any) {
+            console.error('[UPLOAD-LIST] Error:', error);
+            return res.status(500).json({ success: false, error: error.message });
+        }
+    }
+
+    /**
+     * Queue stats
+     */
+    async getQueueStats(req: Request, res: Response) {
+        try {
+            const result = await uploadService.getQueueStats();
+            return res.status(200).json({ success: true, ...result });
+        } catch (error: any) {
+            console.error('[QUEUE-STATS] Error:', error);
+            return res.status(500).json({ success: false, error: error.message });
+        }
+    }
+
+    /**
+     * Retry upload
+     */
+    async retry(req: Request, res: Response) {
+        try {
+            const { videoId } = req.params;
+            const { userId } = ensureAuthenticatedUser(req);
+
+            const result = await uploadService.retryTranscoding(userId, videoId);
+
+            return res.status(200).json({ success: true, data: result });
+        } catch (error: any) {
+            console.error('[UPLOAD-RETRY] Error:', error);
+            return res.status(400).json({ success: false, error: error.message });
+        }
+    }
+
+    /**
+     * Get Raw URL
+     */
+    async getRawUrl(req: Request, res: Response) {
+        try {
+            const { videoId } = req.params;
+            const { userId } = ensureAuthenticatedUser(req);
+
+            const result = await uploadService.getRawUrl(userId, videoId);
+
+            return res.status(200).json({ success: true, data: result });
+        } catch (error: any) {
+            console.error('[RAW-URL] Error:', error);
+            return res.status(400).json({ success: false, error: error.message });
+        }
+    }
+
+    /**
+     * Update video
+     */
+    async update(req: Request, res: Response) {
+        try {
+            const { videoId } = req.params;
+            const { userId } = ensureAuthenticatedUser(req);
+            const { title, description } = req.body;
+
+            const result = await uploadService.updateVideo(userId, videoId, { title, description });
+
+            return res.status(200).json({ success: true, data: result });
+        } catch (error: any) {
+            console.error('[VIDEO-UPDATE] Error:', error);
+            return res.status(400).json({ success: false, error: error.message });
+        }
+    }
+
+    /**
+     * Delete video
+     */
+    async delete(req: Request, res: Response) {
+        try {
+            const { videoId } = req.params;
+            const { userId } = ensureAuthenticatedUser(req);
+
+            const result = await uploadService.deleteVideo(userId, videoId);
+
+            return res.status(200).json({ success: true, data: result });
+        } catch (error: any) {
+            console.error('[VIDEO-DELETE] Error:', error);
+            return res.status(400).json({ success: false, error: error.message });
+        }
+    }
+}
