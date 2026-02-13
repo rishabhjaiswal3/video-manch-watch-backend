@@ -480,7 +480,7 @@ router.get('/stream/:videoId', async (req: Request, res: Response) => {
 
         const signedMaster = generateSignedUrl({
             videoId,
-            path: `playback/master/${videoId}`,
+            path: masterPlaylistPath,  // Use actual R2 path from database
             expiresIn: TOKEN_EXPIRY_SECONDS,
         });
 
