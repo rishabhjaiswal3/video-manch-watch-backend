@@ -31,4 +31,5 @@ export const R2_BUCKETS = {
   RAW: process.env.R2_BUCKET_RAW || 'video-raw-uploads',
   TRANSCODED: process.env.R2_BUCKET_TRANSCODED || 'video-transcoded',
   THUMBNAILS: process.env.R2_BUCKET_THUMBNAILS || process.env.R2_BUCKET_TRANSCODED || 'video-thumbnails',
+  USER_ASSETS: process.env.R2_BUCKET_USER_ASSETS || 'user-assets',
 };

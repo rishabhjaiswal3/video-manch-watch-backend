@@ -2,8 +2,8 @@ import rateLimit from 'express-rate-limit';
 
 // General API rate limiter
 export const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,
+  windowMs: 1 * 60 * 1000, // 1 minute window
+  max: 300, // 300 requests per minute (video platforms need more for signed URLs, analytics, etc.)
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -33,5 +33,17 @@ export const uploadLimiter = rateLimit({
   message: {
     success: false,
     error: 'Upload limit reached. You can upload 3 videos per hour.',
+  },
+});
+
+// Higher limit for playback/stream endpoints (video players make many requests)
+export const playbackLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 100, // 100 requests per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: 'Too many playback requests. Please try again later.',
   },
 });
