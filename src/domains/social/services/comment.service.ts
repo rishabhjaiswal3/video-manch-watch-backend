@@ -234,7 +234,10 @@ export class CommentService {
   /**
    * Delete a comment (soft delete)
    */
-  async deleteComment(userId: string, commentId: string): Promise<{ deleted: boolean }> {
+  async deleteComment(
+    userId: string,
+    commentId: string
+  ): Promise<{ deleted: boolean; videoId?: string; parentId?: string | null }> {
     const comment = await Comment.findOne({ commentId });
     if (!comment) {
       throw new Error('Comment not found');
@@ -248,13 +251,16 @@ export class CommentService {
       return { deleted: false };
     }
 
+    const videoId = comment.videoId;
+    const parentId = comment.parentId ?? null;
+
     comment.isDeleted = true;
     comment.content = '[deleted]';
     await comment.save();
 
     // Decrement video comment count
     await Video.updateOne(
-      { videoId: comment.videoId },
+      { videoId },
       { $inc: { commentCount: -1 } }
     );
 
@@ -266,7 +272,7 @@ export class CommentService {
       );
     }
 
-    return { deleted: true };
+    return { deleted: true, videoId, parentId };
   }
 
   /**

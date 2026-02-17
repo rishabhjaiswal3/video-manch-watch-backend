@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { CommentService } from '../services/comment.service.js';
 import { ensureAuthenticatedUser } from '../../../utils/authHelpers.js';
+import { emitNewComment, emitDeleteComment, emitUpdateComment } from '../../../config/socket.js';
 
 const commentService = new CommentService();
 
@@ -50,6 +51,9 @@ export class CommentController {
       const { content } = req.body;
 
       const comment = await commentService.addComment(userId, videoId, content);
+
+      // Emit real-time event to all users watching this video
+      emitNewComment(videoId, comment);
 
       return res.status(201).json({
         success: true,
@@ -115,6 +119,11 @@ export class CommentController {
 
       const reply = await commentService.replyToComment(userId, commentId, content);
 
+      // Emit real-time event (reply includes videoId from parent)
+      if (reply.videoId) {
+        emitNewComment(reply.videoId, { ...reply, isReply: true, parentId: commentId });
+      }
+
       return res.status(201).json({
         success: true,
         data: reply,
@@ -153,6 +162,11 @@ export class CommentController {
       const { content } = req.body;
 
       const comment = await commentService.editComment(userId, commentId, content);
+
+      // Emit real-time update to all users watching this video
+      if (comment.videoId) {
+        emitUpdateComment(comment.videoId, comment);
+      }
 
       return res.status(200).json({
         success: true,
@@ -198,6 +212,10 @@ export class CommentController {
       const { commentId } = req.params;
 
       const result = await commentService.deleteComment(userId, commentId);
+
+      if (result.deleted && result.videoId) {
+        emitDeleteComment(result.videoId, { commentId, parentId: result.parentId });
+      }
 
       return res.status(200).json({
         success: true,

@@ -30,6 +30,7 @@ import http from 'http';
 import { connectDatabase, disconnectDatabase } from './config/database.js';
 import { disconnectRedis } from './config/redis.js';
 import { loadEnvironment } from './config/env.js';
+import { initializeSocket } from './config/socket.js';
 
 // Domain route imports
 import authRoutes from './domains/auth/routes.js';
@@ -202,13 +203,20 @@ const startServer = async () => {
     // Connect to MongoDB
     await connectDatabase();
 
-    server = app.listen(PORT, '0.0.0.0', () => {
+    // Create HTTP server (needed for Socket.io)
+    server = http.createServer(app);
+
+    // Initialize Socket.io with Redis adapter for scaling
+    initializeSocket(server, allowedOrigins);
+
+    server.listen(PORT, '0.0.0.0', () => {
       console.log(`\n${'='.repeat(56)}`);
       console.log(`  VideoManch API Server`);
       console.log(`${'─'.repeat(56)}`);
       console.log(`  Port:        ${PORT}`);
       console.log(`  Environment: ${env.NODE_ENV}`);
       console.log(`  Health:      http://localhost:${PORT}/health`);
+      console.log(`  WebSocket:   ws://localhost:${PORT}`);
       console.log(`${'─'.repeat(56)}`);
       console.log(`  Domains:`);
       console.log(`    AUTH      → /auth/*`);
