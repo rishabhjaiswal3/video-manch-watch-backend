@@ -1,21 +1,23 @@
 /**
  * VideoManch API Server
  *
- * Architecture: Modular Monolith with 4 Domains
+ * Architecture: Modular Monolith with 5 Domains
  *
- *   ┌─────────────────────────────────────────────────────────────┐
- *   │                      API SERVER (this file)                 │
- *   ├─────────────┬────────────┬───────────────┬─────────────────┤
- *   │   AUTH       │   MEDIA    │  ANALYTICS    │     ADMIN       │
- *   │             │            │               │                 │
- *   │  /auth/*    │  /upload/* │  /analytics/* │  /admin/*       │
- *   │             │  /videos/* │  /playback/*  │  /config/*      │
- *   │             │            │               │                 │
- *   │  signup     │  init      │  overview     │  users          │
- *   │  login      │  complete  │  videos       │  roles          │
- *   │  logout     │  status    │  trends       │  stats          │
- *   │  refresh    │  stream    │  events       │  player config  │
- *   └─────────────┴────────────┴───────────────┴─────────────────┘
+ *   ┌────────────────────────────────────────────────────────────────────────────┐
+ *   │                           API SERVER (this file)                           │
+ *   ├─────────────┬────────────┬───────────────┬─────────────────┬──────────────┤
+ *   │   AUTH      │   MEDIA    │  ANALYTICS    │     ADMIN       │    SOCIAL    │
+ *   │             │            │               │                 │              │
+ *   │  /auth/*    │  /upload/* │  /analytics/* │  /admin/*       │  /profile/*  │
+ *   │             │  /videos/* │  /playback/*  │  /config/*      │  /engage/*   │
+ *   │             │            │               │                 │  /subs/*     │
+ *   │  signup     │  init      │  overview     │  users          │  /comments/* │
+ *   │  login      │  complete  │  videos       │  roles          │              │
+ *   │  logout     │  status    │  trends       │  stats          │  profiles    │
+ *   │  refresh    │  stream    │  events       │  player config  │  likes       │
+ *   │             │            │               │                 │  subscribe   │
+ *   │             │            │               │                 │  comments    │
+ *   └─────────────┴────────────┴───────────────┴─────────────────┴──────────────┘
  *
  *   The Analytics Worker runs as a SEPARATE process (src/worker.ts)
  *   to isolate event processing from the API serving path.
@@ -37,6 +39,12 @@ import playbackRoutes from './domains/analytics/playback.routes.js';
 import creatorAnalyticsRoutes from './domains/analytics/creator.routes.js';
 import adminRoutes from './domains/admin/admin.routes.js';
 import configRoutes from './domains/admin/config.routes.js';
+
+// Social domain routes
+import profileRoutes from './domains/social/profile.routes.js';
+import engagementRoutes from './domains/social/engagement.routes.js';
+import subscriptionRoutes from './domains/social/subscription.routes.js';
+import commentRoutes from './domains/social/comment.routes.js';
 
 // Shared middleware
 import { apiLimiter } from './middleware/rateLimiter.js';
@@ -123,6 +131,12 @@ app.use('/analytics', creatorAnalyticsRoutes);
 //   ADMIN domain (user management + platform config):
 app.use('/admin', adminRoutes);
 app.use('/config', configRoutes);
+//
+//   SOCIAL domain (profiles, engagement, subscriptions, comments):
+app.use('/profile', profileRoutes);
+app.use('/engagement', engagementRoutes);
+app.use('/subscriptions', subscriptionRoutes);
+app.use('/comments', commentRoutes);
 
 
 // ─── Error Handling ────────────────────────────────────
@@ -201,6 +215,7 @@ const startServer = async () => {
       console.log(`    MEDIA     → /upload/*, /videos/*`);
       console.log(`    ANALYTICS → /playback/*, /analytics/*`);
       console.log(`    ADMIN     → /admin/*, /config/*`);
+      console.log(`    SOCIAL    → /profile/*, /engagement/*, /subscriptions/*, /comments/*`);
       console.log(`${'─'.repeat(56)}`);
       console.log(`  ⚠️  Analytics Worker runs separately: npm run worker:dev`);
       console.log(`${'='.repeat(56)}\n`);

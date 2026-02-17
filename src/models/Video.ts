@@ -98,6 +98,11 @@ export interface IVideo extends Document {
   isDownloadable?: boolean;
   showTitle?: boolean;
 
+  // Engagement counters (denormalized for performance)
+  likeCount?: number;
+  dislikeCount?: number;
+  commentCount?: number;
+
   // Retry tracking
   retryCount?: number;
 
@@ -238,6 +243,11 @@ const VideoSchema = new Schema<IVideo>(
     isAdultContent: { type: Boolean, default: false },
     isDownloadable: { type: Boolean, default: false },
     showTitle: { type: Boolean, default: true },
+
+    // Engagement counters
+    likeCount: { type: Number, default: 0, min: 0 },
+    dislikeCount: { type: Number, default: 0, min: 0 },
+    commentCount: { type: Number, default: 0, min: 0 },
 
     // Retry tracking
     retryCount: { type: Number, default: 0 },
