@@ -1,8 +1,19 @@
 import { Request, Response } from 'express';
 import { EngagementService } from '../services/engagement.service.js';
 import { ensureAuthenticatedUser } from '../../../utils/authHelpers.js';
+import { emitEngagementUpdate } from '../../../config/socket.js';
 
 const engagementService = new EngagementService();
+
+// Helper to emit updated engagement counts
+const emitUpdatedCounts = async (videoId: string) => {
+  try {
+    const stats = await engagementService.getVideoEngagement(videoId);
+    emitEngagementUpdate(videoId, stats);
+  } catch {
+    // Ignore errors - don't break the main request
+  }
+};
 
 export class EngagementController {
   /**
@@ -14,6 +25,9 @@ export class EngagementController {
       const { videoId } = req.params;
 
       const result = await engagementService.likeVideo(userId, videoId);
+
+      // Emit real-time update to all viewers
+      emitUpdatedCounts(videoId);
 
       return res.status(200).json({
         success: true,
@@ -46,6 +60,9 @@ export class EngagementController {
 
       const result = await engagementService.dislikeVideo(userId, videoId);
 
+      // Emit real-time update to all viewers
+      emitUpdatedCounts(videoId);
+
       return res.status(200).json({
         success: true,
         data: result,
@@ -76,6 +93,9 @@ export class EngagementController {
       const { videoId } = req.params;
 
       const result = await engagementService.removeEngagement(userId, videoId);
+
+      // Emit real-time update to all viewers
+      emitUpdatedCounts(videoId);
 
       return res.status(200).json({
         success: true,
