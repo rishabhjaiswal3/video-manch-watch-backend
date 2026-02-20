@@ -10,6 +10,11 @@ export interface VideoRoomData {
   userId?: string;
 }
 
+export interface LiveRoomData {
+  streamId: string;
+  userId?: string;
+}
+
 export const initializeSocket = (httpServer: HttpServer, corsOrigins: string[]): Server => {
   const redisUrl = process.env.REDIS_URL;
 
@@ -55,6 +60,36 @@ export const initializeSocket = (httpServer: HttpServer, corsOrigins: string[]):
       console.log(`[Socket.io] ${socket.id} left room: ${room}`);
     });
 
+    // ========================
+    // Live Stream Room Events
+    // ========================
+
+    // Join a live stream room
+    socket.on('join:live', (data: LiveRoomData) => {
+      const room = `live:${data.streamId}`;
+      socket.join(room);
+      console.log(`[Socket.io] ${socket.id} joined live room: ${room}`);
+
+      // Emit viewer joined event to the room
+      io?.to(room).emit('live:viewer-joined', {
+        streamId: data.streamId,
+        userId: data.userId
+      });
+    });
+
+    // Leave a live stream room
+    socket.on('leave:live', (data: LiveRoomData) => {
+      const room = `live:${data.streamId}`;
+      socket.leave(room);
+      console.log(`[Socket.io] ${socket.id} left live room: ${room}`);
+
+      // Emit viewer left event to the room
+      io?.to(room).emit('live:viewer-left', {
+        streamId: data.streamId,
+        userId: data.userId
+      });
+    });
+
     // Handle disconnection
     socket.on('disconnect', (reason) => {
       console.log(`[Socket.io] Client disconnected: ${socket.id}, reason: ${reason}`);
@@ -98,4 +133,50 @@ export const emitUpdateComment = (videoId: string, comment: unknown): void => {
 // Engagement events (optional - for real-time like counts)
 export const emitEngagementUpdate = (videoId: string, data: { likeCount: number; dislikeCount: number }): void => {
   emitToVideoRoom(videoId, 'engagement:update', data);
+};
+
+// ========================
+// Live Stream Events
+// ========================
+
+// Helper function for emitting events to live rooms
+export const emitToLiveRoom = (streamId: string, event: string, data: unknown): void => {
+  if (io) {
+    io.to(`live:${streamId}`).emit(event, data);
+  }
+};
+
+// Live stream started
+export const emitLiveStarted = (streamId: string, data: { streamId: string; title: string; userId: string }): void => {
+  emitToLiveRoom(streamId, 'live:started', data);
+};
+
+// Live stream ended
+export const emitLiveEnded = (streamId: string): void => {
+  emitToLiveRoom(streamId, 'live:ended', { streamId });
+};
+
+// Live viewer count update
+export const emitLiveViewerCount = (streamId: string, count: number): void => {
+  emitToLiveRoom(streamId, 'live:viewers', { streamId, count });
+};
+
+// Live chat message
+export const emitLiveChatMessage = (streamId: string, message: unknown): void => {
+  emitToLiveRoom(streamId, 'live:chat', message);
+};
+
+// Live chat message deleted
+export const emitLiveChatDeleted = (streamId: string, messageId: string): void => {
+  emitToLiveRoom(streamId, 'live:chat-deleted', { streamId, messageId });
+};
+
+// Live chat message pinned
+export const emitLiveChatPinned = (streamId: string, message: unknown): void => {
+  emitToLiveRoom(streamId, 'live:chat-pinned', message);
+};
+
+// Live stream status update
+export const emitLiveStatusUpdate = (streamId: string, status: string): void => {
+  emitToLiveRoom(streamId, 'live:status', { streamId, status });
 };
