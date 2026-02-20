@@ -148,7 +148,11 @@ export class LiveStreamService {
     if (signUrls && stream.status === 'live' && stream.playbackR2Key) {
       // Generate signed URL for playback
       const expiresIn = 3600; // 1 hour
-      playbackUrl = generateSignedUrl(stream.playbackR2Key, streamId, expiresIn);
+      playbackUrl = generateSignedUrl({
+        videoId: streamId,
+        path: stream.playbackR2Key,
+        expiresIn: expiresIn
+      }).signedPath;
     }
 
     return {

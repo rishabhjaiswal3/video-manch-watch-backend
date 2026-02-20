@@ -1,0 +1,1 @@
+{"version":3,"file":"VideoEngagement.d.ts","sourceRoot":"","sources":["../../src/models/VideoEngagement.ts"],"names":[],"mappings":"AAAA,OAAO,QAAQ,EAAE,EAAU,QAAQ,EAAE,MAAM,UAAU,CAAC;AAEtD,MAAM,WAAW,gBAAiB,SAAQ,QAAQ;IAChD,OAAO,EAAE,MAAM,CAAC;IAChB,MAAM,EAAE,MAAM,CAAC;IACf,IAAI,EAAE,MAAM,GAAG,SAAS,CAAC;IACzB,SAAS,EAAE,IAAI,CAAC;CACjB;AA+BD,eAAO,MAAM,eAAe;;;;OAA6E,CAAC"}
