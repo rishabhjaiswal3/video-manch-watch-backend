@@ -12,13 +12,7 @@ class LiveController {
     async createStream(req, res) {
         try {
             const { userId, userType } = (0, authHelpers_js_1.ensureAuthenticatedUser)(req);
-            // Only creators and admins can create live streams
-            if (userType !== 'creator' && userType !== 'admin') {
-                return res.status(403).json({
-                    success: false,
-                    error: 'Only creators can start live streams',
-                });
-            }
+            // Any authenticated user can create live streams
             const result = await liveStreamService.createStream(userId, userType, req.body);
             return res.status(201).json({
                 success: true,
