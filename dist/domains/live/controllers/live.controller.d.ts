@@ -49,6 +49,14 @@ export declare class LiveController {
      */
     updateViewerCount(req: Request, res: Response): Promise<Response<any, Record<string, any>>>;
     /**
+     * Get signed playback URL for a live stream
+     */
+    getPlaybackUrl(req: Request, res: Response): Promise<Response<any, Record<string, any>>>;
+    /**
+     * Link a recorded VOD to a live stream (internal)
+     */
+    linkVod(req: Request, res: Response): Promise<Response<any, Record<string, any>>>;
+    /**
      * Get chat messages for a stream
      */
     getChatMessages(req: Request, res: Response): Promise<Response<any, Record<string, any>>>;

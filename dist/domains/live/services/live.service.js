@@ -76,7 +76,8 @@ class LiveStreamService {
      * Get stream by stream key (for RTMP ingest validation)
      */
     async getStreamByKey(streamKey) {
-        return LiveStream_js_1.LiveStream.findOne({ streamKey, status: { $in: ['created', 'ready'] } });
+        // Allow live status as well so browser/encoder reconnects are not rejected mid-stream.
+        return LiveStream_js_1.LiveStream.findOne({ streamKey, status: { $in: ['created', 'ready', 'live'] } });
     }
     /**
      * Get stream details with streamer profile
@@ -163,7 +164,10 @@ class LiveStreamService {
         stream.startedAt = new Date();
         if (playbackR2Key) {
             stream.playbackR2Key = playbackR2Key;
-            stream.playbackUrl = this.getPlaybackUrl(streamId);
+            const baseUrl = (process.env.R2_PUBLIC_URL || '').replace(/\/$/, '');
+            stream.playbackUrl = baseUrl
+                ? `${baseUrl}/${playbackR2Key}`
+                : this.getPlaybackUrl(streamId);
         }
         return this.updateStreamStatus(stream, 'live', 'Stream started');
     }
@@ -358,6 +362,26 @@ class LiveStreamService {
     getPlaybackUrl(streamId) {
         const baseUrl = process.env.R2_PUBLIC_URL || '';
         return `${baseUrl}/live/${streamId}/master.m3u8`;
+    }
+    /**
+     * Get signed playback URL for a live stream.
+     */
+    async getSignedPlayback(streamId) {
+        const stream = await LiveStream_js_1.LiveStream.findOne({ streamId }).select('-streamKey');
+        if (!stream || !stream.playbackR2Key)
+            return null;
+        const expiresIn = 3600; // 1 hour
+        const { signedPath } = (0, signedUrl_js_1.generateSignedUrl)({
+            videoId: streamId,
+            path: stream.playbackR2Key,
+            expiresIn,
+        });
+        return {
+            streamId: stream.streamId,
+            playbackUrl: stream.playbackUrl || this.getPlaybackUrl(streamId),
+            signedUrl: signedPath,
+            expiresIn,
+        };
     }
     // ========================
     // Chat Methods

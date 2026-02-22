@@ -1,7 +1,58 @@
 import { Video } from '../../../models/Video.js';
 import { generateSignedUrl } from '../../../utils/signedUrl.js';
+import { v4 as uuidv4 } from 'uuid';
+
+interface RegisterVODInput {
+    userId: string;
+    userType: 'user' | 'creator';
+    title: string;
+    description?: string;
+    category?: string;
+    masterPlaylistUrl: string;
+    thumbnail?: string;
+    duration?: number;
+    contentType?: 'vod' | 'reel' | 'live';
+    source?: string;
+    sourceStreamId?: string;
+}
 
 export class VideoService {
+    /**
+     * Register a VOD entry created from live recording.
+     */
+    async registerVOD(input: RegisterVODInput): Promise<{ videoId: string }> {
+        const videoId = uuidv4();
+
+        await Video.create({
+            videoId,
+            userId: input.userId,
+            userType: input.userType,
+            title: input.title,
+            description: input.description,
+            status: 'completed',
+            transcodingCompleted: true,
+            contentType: input.contentType || 'vod',
+            masterPlaylistUrl: input.masterPlaylistUrl,
+            thumbnail: input.thumbnail,
+            duration: input.duration || 0,
+            outputs: [],
+            originalFile: {
+                filename: `live-recording-${videoId}.m3u8`,
+                size: 0,
+                mimeType: 'application/vnd.apple.mpegurl',
+                r2Key: input.masterPlaylistUrl,
+            },
+            statusHistory: [{
+                from: 'pending',
+                to: 'completed',
+                at: new Date(),
+                reason: input.source || 'live_recording',
+            }],
+        });
+
+        return { videoId };
+    }
+
     /**
      * List public videos (VOD/Live), excluding Reels by default
      */

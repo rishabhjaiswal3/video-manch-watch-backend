@@ -15,6 +15,8 @@ const liveController = new live_controller_js_1.LiveController();
 router.get('/streams', (req, res) => liveController.getActiveStreams(req, res));
 // Get stream details
 router.get('/:streamId', (req, res) => liveController.getStreamDetails(req, res));
+// Get signed playback URL for a stream
+router.get('/:streamId/playback', (req, res) => liveController.getPlaybackUrl(req, res));
 // Get chat messages for a stream
 router.get('/:streamId/chat', (req, res) => liveController.getChatMessages(req, res));
 // ========================
@@ -26,6 +28,8 @@ router.post('/ingest/validate', (0, validate_js_1.validate)(live_js_1.validateSt
 router.post('/:streamId/start', (req, res) => liveController.startStream(req, res));
 // End stream (can be called by transcoding engine or owner)
 router.post('/:streamId/end', (req, res) => liveController.endStream(req, res));
+// Link VOD recording to stream (internal)
+router.post('/:streamId/link-vod', (req, res) => liveController.linkVod(req, res));
 // Update viewer count (internal)
 router.post('/:streamId/viewers', (req, res) => liveController.updateViewerCount(req, res));
 // ========================

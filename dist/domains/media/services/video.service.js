@@ -3,7 +3,41 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.VideoService = void 0;
 const Video_js_1 = require("../../../models/Video.js");
 const signedUrl_js_1 = require("../../../utils/signedUrl.js");
+const uuid_1 = require("uuid");
 class VideoService {
+    /**
+     * Register a VOD entry created from live recording.
+     */
+    async registerVOD(input) {
+        const videoId = (0, uuid_1.v4)();
+        await Video_js_1.Video.create({
+            videoId,
+            userId: input.userId,
+            userType: input.userType,
+            title: input.title,
+            description: input.description,
+            status: 'completed',
+            transcodingCompleted: true,
+            contentType: input.contentType || 'vod',
+            masterPlaylistUrl: input.masterPlaylistUrl,
+            thumbnail: input.thumbnail,
+            duration: input.duration || 0,
+            outputs: [],
+            originalFile: {
+                filename: `live-recording-${videoId}.m3u8`,
+                size: 0,
+                mimeType: 'application/vnd.apple.mpegurl',
+                r2Key: input.masterPlaylistUrl,
+            },
+            statusHistory: [{
+                    from: 'pending',
+                    to: 'completed',
+                    at: new Date(),
+                    reason: input.source || 'live_recording',
+                }],
+        });
+        return { videoId };
+    }
     /**
      * List public videos (VOD/Live), excluding Reels by default
      */

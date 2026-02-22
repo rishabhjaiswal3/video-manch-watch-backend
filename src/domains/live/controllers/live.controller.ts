@@ -382,6 +382,9 @@ export class LiveController {
           userId: stream.userId,
           userType: stream.userType,
           title: stream.title,
+          description: stream.description,
+          category: stream.category,
+          recordingEnabled: stream.recordingEnabled,
         },
       });
     } catch (error: any) {
@@ -414,6 +417,70 @@ export class LiveController {
       return res.status(500).json({
         success: false,
         error: 'Failed to update viewer count',
+      });
+    }
+  }
+
+  /**
+   * Get signed playback URL for a live stream
+   */
+  async getPlaybackUrl(req: Request, res: Response) {
+    try {
+      const { streamId } = req.params;
+      const data = await liveStreamService.getSignedPlayback(streamId);
+
+      if (!data) {
+        return res.status(404).json({
+          success: false,
+          error: 'Playback not available',
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        data,
+      });
+    } catch (error: any) {
+      console.error('[LIVE] Get playback URL error:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to get playback URL',
+      });
+    }
+  }
+
+  /**
+   * Link a recorded VOD to a live stream (internal)
+   */
+  async linkVod(req: Request, res: Response) {
+    try {
+      const internalKey = req.headers['x-internal-key'];
+      if (internalKey !== process.env.INTERNAL_API_KEY) {
+        return res.status(403).json({
+          success: false,
+          error: 'Unauthorized',
+        });
+      }
+
+      const { streamId } = req.params;
+      const { videoId } = req.body;
+      if (!videoId) {
+        return res.status(400).json({
+          success: false,
+          error: 'videoId is required',
+        });
+      }
+
+      await liveStreamService.linkRecordedVideo(streamId, videoId);
+      return res.status(200).json({
+        success: true,
+        data: { streamId, videoId },
+      });
+    } catch (error: any) {
+      console.error('[LIVE] Link VOD error:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to link VOD',
       });
     }
   }

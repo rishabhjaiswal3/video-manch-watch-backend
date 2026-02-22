@@ -1,4 +1,23 @@
+interface RegisterVODInput {
+    userId: string;
+    userType: 'user' | 'creator';
+    title: string;
+    description?: string;
+    category?: string;
+    masterPlaylistUrl: string;
+    thumbnail?: string;
+    duration?: number;
+    contentType?: 'vod' | 'reel' | 'live';
+    source?: string;
+    sourceStreamId?: string;
+}
 export declare class VideoService {
+    /**
+     * Register a VOD entry created from live recording.
+     */
+    registerVOD(input: RegisterVODInput): Promise<{
+        videoId: string;
+    }>;
     /**
      * List public videos (VOD/Live), excluding Reels by default
      */
@@ -35,4 +54,5 @@ export declare class VideoService {
         };
     }>;
 }
+export {};
 //# sourceMappingURL=video.service.d.ts.map

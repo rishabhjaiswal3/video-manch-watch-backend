@@ -145,6 +145,15 @@ export declare class LiveStreamService {
      */
     private getPlaybackUrl;
     /**
+     * Get signed playback URL for a live stream.
+     */
+    getSignedPlayback(streamId: string): Promise<{
+        streamId: string;
+        playbackUrl: string;
+        signedUrl: string;
+        expiresIn: number;
+    } | null>;
+    /**
      * Save chat message
      */
     saveChatMessage(streamId: string, userId: string, message: string): Promise<ChatMessageResult>;
