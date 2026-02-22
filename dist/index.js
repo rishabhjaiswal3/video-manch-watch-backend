@@ -57,10 +57,11 @@ const errorHandler_js_1 = require("./middleware/errorHandler.js");
 const env = (0, env_js_1.loadEnvironment)();
 const app = (0, express_1.default)();
 const PORT = env.PORT;
-// Required when running behind Cloudflare/load balancers so rate limiting can
-// read client IP from X-Forwarded-For without throwing ERR_ERL_UNEXPECTED_X_FORWARDED_FOR.
-if (env.NODE_ENV === 'production') {
-    app.set('trust proxy', true);
+// Required when running behind proxies so rate limiting can safely read client IP.
+// Use a hop count (not boolean true) to avoid ERR_ERL_PERMISSIVE_TRUST_PROXY.
+const trustProxyHops = Number(process.env.TRUST_PROXY_HOPS || '1');
+if (Number.isFinite(trustProxyHops) && trustProxyHops > 0) {
+    app.set('trust proxy', trustProxyHops);
 }
 // Track server state
 let isShuttingDown = false;
