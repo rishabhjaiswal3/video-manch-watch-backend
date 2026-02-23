@@ -1,26 +1,13 @@
-/**
- * Email Service — MSG91
- *
- * Sends transactional emails (OTP, welcome, password reset) via MSG91's
- * Email API: https://control.msg91.com/api/v5/email/send
- *
- * Required env var:
- *   MSG91_AUTH_KEY=<your key from MSG91 dashboard>
- */
 
-// ─── Constants (mirrored from constants/loginEmailConstants.js) ───────────────
 
-const MSG91_EMAIL_API_URL = 'https://control.msg91.com/api/v5/email/send';
-
-const EMAIL_FROM = 'support@videomanch.com';
-const EMAIL_FROM_NAME = 'VideoManch';
-const EMAIL_DOMAIN = 'videomanch.com';
-
-const TEMPLATE_IDS = {
-  OTP_LOGIN: 'videomanch_template_1',
-  WELCOME: 'videomanch_welcome_1',
-  PASSWORD_RESET: 'videomanch_password_reset_1',
-} as const;
+import {
+  EMAIL_DOMAIN,
+  EMAIL_FROM,
+  EMAIL_FROM_NAME,
+  MSG91_EMAIL_API_URL,
+  TEMPLATE_IDS,
+  TEMPLATE_VARIABLES,
+} from '../constants/loginEmailConstants.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -109,7 +96,7 @@ export async function sendOtpEmail(
   return sendEmail({
     to,
     templateId: TEMPLATE_IDS.OTP_LOGIN,
-    variables: { OTP: otp },
+    variables: { [TEMPLATE_VARIABLES.OTP]: otp },
   });
 }
 
@@ -123,7 +110,7 @@ export async function sendWelcomeEmail(to: Recipient): Promise<EmailResult> {
   return sendEmail({
     to,
     templateId: TEMPLATE_IDS.WELCOME,
-    variables: { USERNAME: to.name ?? to.email },
+    variables: { [TEMPLATE_VARIABLES.USERNAME]: to.name ?? to.email },
   });
 }
 
@@ -143,7 +130,10 @@ export async function sendPasswordResetEmail(
   return sendEmail({
     to,
     templateId: TEMPLATE_IDS.PASSWORD_RESET,
-    variables: { USERNAME: to.name ?? to.email, RESET_LINK: resetLink },
+    variables: {
+      [TEMPLATE_VARIABLES.USERNAME]: to.name ?? to.email,
+      [TEMPLATE_VARIABLES.RESET_LINK]: resetLink,
+    },
   });
 }
 
