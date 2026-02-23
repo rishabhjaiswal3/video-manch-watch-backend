@@ -28,11 +28,7 @@ interface EmailResult {
   error?: string;
 }
 
-// ─── Core send function ───────────────────────────────────────────────────────
 
-/**
- * Low-level send — builds the MSG91 payload and fires the request.
- */
 async function sendEmail(options: SendEmailOptions): Promise<EmailResult> {
   const authKey = process.env.MSG91_AUTH_KEY;
 
@@ -81,14 +77,6 @@ async function sendEmail(options: SendEmailOptions): Promise<EmailResult> {
   }
 }
 
-// ─── High-level helpers ───────────────────────────────────────────────────────
-
-/**
- * Send an OTP email for login / signup verification.
- *
- * @example
- * await sendOtpEmail({ email: 'user@example.com', name: 'Rishabh' }, '6534');
- */
 export async function sendOtpEmail(
   to: Recipient,
   otp: string
@@ -100,41 +88,5 @@ export async function sendOtpEmail(
   });
 }
 
-/**
- * Send a welcome email after successful registration.
- *
- * @example
- * await sendWelcomeEmail({ email: 'user@example.com', name: 'Rishabh' });
- */
-export async function sendWelcomeEmail(to: Recipient): Promise<EmailResult> {
-  return sendEmail({
-    to,
-    templateId: TEMPLATE_IDS.WELCOME,
-    variables: { [TEMPLATE_VARIABLES.USERNAME]: to.name ?? to.email },
-  });
-}
 
-/**
- * Send a password-reset link email.
- *
- * @example
- * await sendPasswordResetEmail(
- *   { email: 'user@example.com', name: 'Rishabh' },
- *   'https://videomanch.com/reset?token=abc'
- * );
- */
-export async function sendPasswordResetEmail(
-  to: Recipient,
-  resetLink: string
-): Promise<EmailResult> {
-  return sendEmail({
-    to,
-    templateId: TEMPLATE_IDS.PASSWORD_RESET,
-    variables: {
-      [TEMPLATE_VARIABLES.USERNAME]: to.name ?? to.email,
-      [TEMPLATE_VARIABLES.RESET_LINK]: resetLink,
-    },
-  });
-}
-
-export default { sendOtpEmail, sendWelcomeEmail, sendPasswordResetEmail };
+export default { sendOtpEmail };
