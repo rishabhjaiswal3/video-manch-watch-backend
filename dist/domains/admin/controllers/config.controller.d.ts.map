@@ -1,1 +1,0 @@
-{"version":3,"file":"config.controller.d.ts","sourceRoot":"","sources":["../../../../src/domains/admin/controllers/config.controller.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,OAAO,EAAE,QAAQ,EAAE,MAAM,SAAS,CAAC;AAK5C,qBAAa,gBAAgB;IACzB;;OAEG;IACG,eAAe,CAAC,GAAG,EAAE,OAAO,EAAE,GAAG,EAAE,QAAQ;IAgBjD;;OAEG;IACG,kBAAkB,CAAC,GAAG,EAAE,OAAO,EAAE,GAAG,EAAE,QAAQ;CAsBvD"}
