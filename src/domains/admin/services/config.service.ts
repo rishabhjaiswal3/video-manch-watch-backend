@@ -2,7 +2,7 @@ import { AppConfig } from '../../../shared/models/AppConfig.js';
 
 const DEFAULT_PLAYER_URL =
     process.env.PLAYER_SCRIPT_URL ||
-    'https://video-manch-player.videomanch.com/v.1.1.0/videomanch-player.js';
+    'https://video-manch-player.videomanch.com/v1.0.0/videomanch-player.js';
 
 export class ConfigService {
     /**
