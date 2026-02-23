@@ -46,9 +46,7 @@ import profileRoutes from './domains/social/profile.routes.js';
 import engagementRoutes from './domains/social/engagement.routes.js';
 import subscriptionRoutes from './domains/social/subscription.routes.js';
 import commentRoutes from './domains/social/comment.routes.js';
-
-// Live streaming routes
-import liveRoutes from './domains/live/live.routes.js';
+import watchLaterRoutes from './domains/social/watchLater.routes.js';
 
 // Shared middleware
 import { apiLimiter } from './middleware/rateLimiter.js';
@@ -148,10 +146,7 @@ app.use('/profile', profileRoutes);
 app.use('/engagement', engagementRoutes);
 app.use('/subscriptions', subscriptionRoutes);
 app.use('/comments', commentRoutes);
-//
-//   LIVE domain (live streaming):
-app.use('/live', liveRoutes);
-
+app.use('/watch-later', watchLaterRoutes);
 
 // ─── Error Handling ────────────────────────────────────
 
@@ -237,7 +232,6 @@ const startServer = async () => {
       console.log(`    ANALYTICS → /playback/*, /analytics/*`);
       console.log(`    ADMIN     → /admin/*, /config/*`);
       console.log(`    SOCIAL    → /profile/*, /engagement/*, /subscriptions/*, /comments/*`);
-      console.log(`    LIVE      → /live/*`);
       console.log(`${'─'.repeat(56)}`);
       console.log(`  ⚠️  Analytics Worker runs separately: npm run worker:dev`);
       console.log(`${'='.repeat(56)}\n`);
