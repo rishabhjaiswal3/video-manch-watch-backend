@@ -60,6 +60,80 @@ export class AuthController {
         }
     }
 
+    async loginUserWithOtp(req: Request, res: Response) {
+        try {
+            const { email, otp } = req.body;
+
+            if (!otp) {
+                const result = await authService.requestLoginOtp('user', email);
+                return res.status(200).json({
+                    success: true,
+                    data: result,
+                    message: 'OTP sent to your email.',
+                });
+            }
+
+            const result = await authService.verifyLoginOtp('user', email, otp);
+            return res.status(200).json({
+                success: true,
+                data: result,
+            });
+        } catch (error: any) {
+            const message = error?.message || 'OTP login failed.';
+            const status = message.includes('Invalid OTP') || message.includes('expired')
+                ? 401
+                : message.includes('account found')
+                    ? 404
+                    : 500;
+
+            if (status === 500) {
+                console.error('[AUTH] User OTP login error:', error);
+            }
+
+            return res.status(status).json({
+                success: false,
+                error: message,
+            });
+        }
+    }
+
+    async loginCreatorWithOtp(req: Request, res: Response) {
+        try {
+            const { email, otp } = req.body;
+
+            if (!otp) {
+                const result = await authService.requestLoginOtp('creator', email);
+                return res.status(200).json({
+                    success: true,
+                    data: result,
+                    message: 'OTP sent to your email.',
+                });
+            }
+
+            const result = await authService.verifyLoginOtp('creator', email, otp);
+            return res.status(200).json({
+                success: true,
+                data: result,
+            });
+        } catch (error: any) {
+            const message = error?.message || 'OTP login failed.';
+            const status = message.includes('Invalid OTP') || message.includes('expired')
+                ? 401
+                : message.includes('account found')
+                    ? 404
+                    : 500;
+
+            if (status === 500) {
+                console.error('[AUTH] Creator OTP login error:', error);
+            }
+
+            return res.status(status).json({
+                success: false,
+                error: message,
+            });
+        }
+    }
+
     async refresh(req: Request, res: Response) {
         try {
             const { refreshToken } = req.body;
