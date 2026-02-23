@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { EngagementController } from './controllers/engagement.controller.js';
-import { authenticate } from '../../middleware/auth.js';
+import { authenticate } from '../../shared/middleware/auth.js';
 
 const router = Router();
 const engagementController = new EngagementController();

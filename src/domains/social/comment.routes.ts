@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { CommentController } from './controllers/comment.controller.js';
-import { validate } from '../../middleware/validate.js';
-import { createCommentSchema, updateCommentSchema } from '../../schemas/social.js';
-import { authenticate } from '../../middleware/auth.js';
+import { validate } from '../../shared/middleware/validate.js';
+import { createCommentSchema, updateCommentSchema } from '../../shared/schemas/social.js';
+import { authenticate } from '../../shared/middleware/auth.js';
 
 const router = Router();
 const commentController = new CommentController();

@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { EngagementService } from '../services/engagement.service.js';
-import { ensureAuthenticatedUser } from '../../../utils/authHelpers.js';
-import { emitEngagementUpdate } from '../../../config/socket.js';
+import { ensureAuthenticatedUser } from '../../../shared/utils/authHelpers.js';
+import { emitEngagementUpdate } from '../../../shared/config/socket.js';
 
 const engagementService = new EngagementService();
 

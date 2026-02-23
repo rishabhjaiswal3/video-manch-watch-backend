@@ -10,4 +10,4 @@
  */
 
 // The analytics-related playback routes are in the analytics domain
-export { default } from '../../routes/playback.js';
+export { default } from '../analytics/playback.routes.js';

@@ -1,6 +1,6 @@
-import { VideoEngagement } from '../../../models/VideoEngagement.js';
-import { Video } from '../../../models/Video.js';
-import { Profile } from '../../../models/Profile.js';
+import { VideoEngagement } from '../../../shared/models/VideoEngagement.js';
+import { Video } from '../../../shared/models/Video.js';
+import { Profile } from '../../../shared/models/Profile.js';
 
 export class EngagementService {
   /**

@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
-import { Video, IVideo } from '../models/Video.js';
-import { authenticate } from '../middleware/auth.js';
-import { ensureAuthenticatedUser } from '../utils/authHelpers.js';
+import { Video, IVideo } from '../../../shared/models/Video.js';
+import { authenticate } from '../../../shared/middleware/auth.js';
+import { ensureAuthenticatedUser } from '../../../shared/utils/authHelpers.js';
 
 const router = Router();
 router.use(authenticate);

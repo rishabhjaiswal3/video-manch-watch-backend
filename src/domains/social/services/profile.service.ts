@@ -1,9 +1,9 @@
-import { Profile } from '../../../models/Profile.js';
-import { Video } from '../../../models/Video.js';
-import { r2Service } from '../../../services/r2Service.js';
-import { R2_BUCKETS } from '../../../config/r2.js';
+import { Profile } from '../../../shared/models/Profile.js';
+import { Video } from '../../../shared/models/Video.js';
+import { r2Service } from '../../../infra/storage/r2Service.js';
+import { R2_BUCKETS } from '../../../shared/config/r2.js';
 import { v4 as uuidv4 } from 'uuid';
-import type { CreateProfileInput, UpdateProfileInput } from '../../../schemas/social.js';
+import type { CreateProfileInput, UpdateProfileInput } from '../../../shared/schemas/social.js';
 
 export class ProfileService {
   /**

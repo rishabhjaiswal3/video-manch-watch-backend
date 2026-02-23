@@ -1,5 +1,5 @@
-import { Video } from '../../../models/Video.js';
-import { generateSignedUrl } from '../../../utils/signedUrl.js';
+import { Video } from '../../../shared/models/Video.js';
+import { generateSignedUrl } from '../../../shared/utils/signedUrl.js';
 import { v4 as uuidv4 } from 'uuid';
 
 interface RegisterVODInput {

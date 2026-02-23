@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { SubscriptionController } from './controllers/subscription.controller.js';
-import { validate } from '../../middleware/validate.js';
-import { updateNotificationSchema } from '../../schemas/social.js';
-import { authenticate } from '../../middleware/auth.js';
+import { validate } from '../../shared/middleware/validate.js';
+import { updateNotificationSchema } from '../../shared/schemas/social.js';
+import { authenticate } from '../../shared/middleware/auth.js';
 
 const router = Router();
 const subscriptionController = new SubscriptionController();

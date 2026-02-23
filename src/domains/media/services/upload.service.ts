@@ -1,8 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
-import { Video } from '../../../models/Video.js';
-import { r2Service } from '../../../services/r2Service.js';
-import { queueService } from '../../../services/queueService.js';
-import { R2_BUCKETS } from '../../../config/r2.js';
+import { Video } from '../../../shared/models/Video.js';
+import { r2Service } from '../../../infra/storage/r2Service.js';
+import { queueService } from '../../../infra/queue/queueService.js';
+import { R2_BUCKETS } from '../../../shared/config/r2.js';
 
 // Constants
 const ALLOWED_MIME_TYPES = [

@@ -1,8 +1,8 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import { User } from '../../../models/User.js';
-import { getRedisConnection } from '../../../config/redis.js';
-import { sendOtpEmail } from '../../../services/emailService.js';
+import { User } from '../../../shared/models/User.js';
+import { getRedisConnection } from '../../../shared/config/redis.js';
+import { sendOtpEmail } from '../../../infra/email/emailService.js';
 
 export interface AuthSuccess {
     user: {
@@ -17,6 +17,8 @@ export interface AuthSuccess {
 export class AuthService {
     private static readonly OTP_TTL_SECONDS = 10 * 60;
 
+    private static readonly RESET_OTP_TTL_SECONDS = 10 * 60;
+
     private normalizeEmail(email: string): string {
         return email.toLowerCase().trim();
     }
@@ -25,8 +27,28 @@ export class AuthService {
         return `login_${role}_${email}`;
     }
 
+    private buildResetOtpKey(role: 'user' | 'creator', email: string): string {
+        return `password_reset_${role}_${email}`;
+    }
+
     private generateOtp(): string {
         return Math.floor(100000 + Math.random() * 900000).toString();
+    }
+
+    private async issueAuthTokens(user: any): Promise<AuthSuccess> {
+        const { accessToken, refreshToken } = this.generateTokens(user._id.toString(), user.email, user.userType);
+        user.refreshToken = await bcrypt.hash(refreshToken, 10);
+        await user.save();
+
+        return {
+            user: {
+                id: user._id.toString(),
+                email: user.email,
+                userType: user.userType,
+            },
+            accessToken,
+            refreshToken,
+        };
     }
 
     /**
@@ -100,22 +122,25 @@ export class AuthService {
         };
     }
 
-    /**
-     * Send OTP for role-based login.
-     * Request body pattern:
-     *   { email } -> sends OTP and stores in Redis with TTL.
-     */
-    async requestLoginOtp(role: 'user' | 'creator', email: string): Promise<{ otpSent: boolean; ttlSeconds: number }> {
+    async startRoleLogin(role: 'user' | 'creator', email: string): Promise<{
+        accountExists: boolean;
+        next: 'password' | 'otp';
+        otpSent?: boolean;
+        ttlSeconds?: number;
+    }> {
         const normalizedEmail = this.normalizeEmail(email);
-        const user = await User.findOne({ email: normalizedEmail, userType: role });
-        if (!user) {
-            throw new Error(`No ${role} account found for this email.`);
+
+        const existing = await User.findOne({ email: normalizedEmail });
+        if (existing) {
+            if (existing.userType !== role) {
+                throw new Error(`Email already registered as ${existing.userType}. Use that portal.`);
+            }
+            return { accountExists: true, next: 'password' };
         }
 
         const otp = this.generateOtp();
         const redis = getRedisConnection();
         const key = this.buildOtpKey(role, normalizedEmail);
-
         await redis.set(key, otp, 'EX', AuthService.OTP_TTL_SECONDS);
 
         const emailResult = await sendOtpEmail(
@@ -127,19 +152,39 @@ export class AuthService {
             throw new Error(emailResult.error || 'Failed to send OTP email.');
         }
 
-        return { otpSent: true, ttlSeconds: AuthService.OTP_TTL_SECONDS };
+        return {
+            accountExists: false,
+            next: 'otp',
+            otpSent: true,
+            ttlSeconds: AuthService.OTP_TTL_SECONDS,
+        };
     }
 
-    /**
-     * Verify OTP and return auth tokens.
-     * Request body pattern:
-     *   { email, otp } -> verifies OTP and logs user in.
-     */
-    async verifyLoginOtp(role: 'user' | 'creator', email: string, otp: string): Promise<AuthSuccess> {
+    async loginWithRolePassword(role: 'user' | 'creator', email: string, password: string): Promise<AuthSuccess> {
         const normalizedEmail = this.normalizeEmail(email);
         const user = await User.findOne({ email: normalizedEmail, userType: role });
         if (!user) {
             throw new Error(`No ${role} account found for this email.`);
+        }
+
+        const isMatch = await user.comparePassword(password);
+        if (!isMatch) {
+            throw new Error('Invalid email or password.');
+        }
+
+        return this.issueAuthTokens(user);
+    }
+
+    async verifySignupOtpAndCreate(
+        role: 'user' | 'creator',
+        email: string,
+        otp: string,
+        password: string
+    ): Promise<AuthSuccess> {
+        const normalizedEmail = this.normalizeEmail(email);
+        const existing = await User.findOne({ email: normalizedEmail });
+        if (existing) {
+            throw new Error('Account already exists. Use password login.');
         }
 
         const redis = getRedisConnection();
@@ -156,20 +201,78 @@ export class AuthService {
 
         await redis.del(key);
 
-        const { accessToken, refreshToken } = this.generateTokens(user._id.toString(), user.email, user.userType);
-
-        user.refreshToken = await bcrypt.hash(refreshToken, 10);
+        const user = new User({
+            email: normalizedEmail,
+            password,
+            userType: role,
+        });
         await user.save();
 
-        return {
-            user: {
-                id: user._id.toString(),
-                email: user.email,
-                userType: user.userType,
-            },
-            accessToken,
-            refreshToken,
-        };
+        return this.issueAuthTokens(user);
+    }
+
+    async requestPasswordResetOtp(role: 'user' | 'creator', email: string): Promise<{ otpSent: boolean; ttlSeconds: number }> {
+        const normalizedEmail = this.normalizeEmail(email);
+        const user = await User.findOne({ email: normalizedEmail, userType: role });
+        if (!user) {
+            throw new Error(`No ${role} account found for this email.`);
+        }
+
+        const otp = this.generateOtp();
+        const redis = getRedisConnection();
+        const key = this.buildResetOtpKey(role, normalizedEmail);
+        await redis.set(key, otp, 'EX', AuthService.RESET_OTP_TTL_SECONDS);
+
+        const emailResult = await sendOtpEmail(
+            { email: normalizedEmail, name: normalizedEmail.split('@')[0] },
+            otp
+        );
+
+        if (!emailResult.success) {
+            throw new Error(emailResult.error || 'Failed to send OTP email.');
+        }
+
+        return { otpSent: true, ttlSeconds: AuthService.RESET_OTP_TTL_SECONDS };
+    }
+
+    async resetPasswordWithOtp(
+        role: 'user' | 'creator',
+        email: string,
+        otp: string,
+        password: string,
+        currentPassword?: string
+    ): Promise<{ updated: boolean }> {
+        const normalizedEmail = this.normalizeEmail(email);
+        const user = await User.findOne({ email: normalizedEmail, userType: role });
+        if (!user) {
+            throw new Error(`No ${role} account found for this email.`);
+        }
+
+        const redis = getRedisConnection();
+        const key = this.buildResetOtpKey(role, normalizedEmail);
+        const storedOtp = await redis.get(key);
+
+        if (!storedOtp) {
+            throw new Error('OTP expired. Please request a new OTP.');
+        }
+
+        if (storedOtp !== otp.trim()) {
+            throw new Error('Invalid OTP.');
+        }
+
+        if (currentPassword) {
+            const isCurrentValid = await user.comparePassword(currentPassword);
+            if (!isCurrentValid) {
+                throw new Error('Current password is incorrect.');
+            }
+        }
+
+        user.password = password;
+        user.refreshToken = undefined;
+        await user.save();
+        await redis.del(key);
+
+        return { updated: true };
     }
 
     /**

@@ -1,16 +1,16 @@
 import { Router, Request, Response } from 'express';
-import { VideoAnalytics, ActiveSession, IPlaybackEvent } from '../models/VideoAnalytics.js';
-import { UserWatchHistory } from '../models/UserAnalytics.js';
-import { Video } from '../models/Video.js';
-import { getNumericEnv } from '../config/env.js';
-import { generateSignedUrl, verifySignedUrl } from '../utils/signedUrl.js';
-import { r2Service } from '../services/r2Service.js';
-import { R2_BUCKETS } from '../config/r2.js';
+import { VideoAnalytics, ActiveSession, IPlaybackEvent } from '../../../shared/models/VideoAnalytics.js';
+import { UserWatchHistory } from '../../../shared/models/UserAnalytics.js';
+import { Video } from '../../../shared/models/Video.js';
+import { getNumericEnv } from '../../../shared/config/env.js';
+import { generateSignedUrl, verifySignedUrl } from '../../../shared/utils/signedUrl.js';
+import { r2Service } from '../../../infra/storage/r2Service.js';
+import { R2_BUCKETS } from '../../../shared/config/r2.js';
 import {
     pushEventsToRedis,
     updateActiveSession,
     removeActiveSession,
-} from '../services/analyticsWorker.js';
+} from '../../../workers/services/analyticsWorker.js';
 
 const router = Router();
 
@@ -402,7 +402,7 @@ router.get('/user/:userId/stats', async (req: Request, res: Response) => {
 
         const [summary, recentHistory] = await Promise.all([
             // Note: We import UserAnalyticsSummary here to avoid circular deps
-            (await import('../models/UserAnalytics.js')).UserAnalyticsSummary.findOne({ userId }).lean(),
+            (await import('../../../shared/models/UserAnalytics.js')).UserAnalyticsSummary.findOne({ userId }).lean(),
             UserWatchHistory.find({ userId })
                 .sort({ lastWatchedAt: -1 })
                 .limit(5)

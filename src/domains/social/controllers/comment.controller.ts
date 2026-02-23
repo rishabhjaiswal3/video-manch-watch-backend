@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { CommentService } from '../services/comment.service.js';
-import { ensureAuthenticatedUser } from '../../../utils/authHelpers.js';
-import { emitNewComment, emitDeleteComment, emitUpdateComment } from '../../../config/socket.js';
+import { ensureAuthenticatedUser } from '../../../shared/utils/authHelpers.js';
+import { emitNewComment, emitDeleteComment, emitUpdateComment } from '../../../shared/config/socket.js';
 
 const commentService = new CommentService();
 

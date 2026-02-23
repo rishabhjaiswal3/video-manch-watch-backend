@@ -19,10 +19,10 @@
  *   - No data lost on crash (Redis is durable)
  */
 
-import { getRedisConnection } from '../config/redis.js';
-import { VideoAnalytics, ActiveSession } from '../models/VideoAnalytics.js';
-import { UserWatchHistory, UserAnalyticsSummary } from '../models/UserAnalytics.js';
-import { getNumericEnv } from '../config/env.js';
+import { getRedisConnection } from '../../shared/config/redis.js';
+import { VideoAnalytics, ActiveSession } from '../../shared/models/VideoAnalytics.js';
+import { UserWatchHistory, UserAnalyticsSummary } from '../../shared/models/UserAnalytics.js';
+import { getNumericEnv } from '../../shared/config/env.js';
 
 // ─── Configuration ──────────────────────────────────────
 

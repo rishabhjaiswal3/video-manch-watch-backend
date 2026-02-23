@@ -1,5 +1,5 @@
 import { Queue, QueueEvents } from 'bullmq';
-import { getRedisConnection } from '../config/redis.js';
+import { getRedisConnection } from '../../shared/config/redis.js';
 
 export interface TranscodeJobData {
   videoId: string;

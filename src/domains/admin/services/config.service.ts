@@ -1,4 +1,4 @@
-import { AppConfig } from '../../../models/AppConfig.js';
+import { AppConfig } from '../../../shared/models/AppConfig.js';
 
 const DEFAULT_PLAYER_URL =
     process.env.PLAYER_SCRIPT_URL ||

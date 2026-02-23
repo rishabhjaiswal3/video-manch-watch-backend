@@ -1,6 +1,6 @@
-import { Subscription } from '../../../models/Subscription.js';
-import { Profile } from '../../../models/Profile.js';
-import { User } from '../../../models/User.js';
+import { Subscription } from '../../../shared/models/Subscription.js';
+import { Profile } from '../../../shared/models/Profile.js';
+import { User } from '../../../shared/models/User.js';
 
 export class SubscriptionService {
   /**

@@ -1,8 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
-import { Comment } from '../../../models/Comment.js';
-import { CommentReaction } from '../../../models/CommentReaction.js';
-import { Video } from '../../../models/Video.js';
-import { Profile } from '../../../models/Profile.js';
+import { Comment } from '../../../shared/models/Comment.js';
+import { CommentReaction } from '../../../shared/models/CommentReaction.js';
+import { Video } from '../../../shared/models/Video.js';
+import { Profile } from '../../../shared/models/Profile.js';
 
 export class CommentService {
   /**

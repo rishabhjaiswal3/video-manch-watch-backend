@@ -11,4 +11,4 @@
  *   GET /api/analytics/trends
  */
 
-export { default } from '../../routes/analytics.js';
+export { default } from './routes/creator.route.impl.js';

@@ -4,12 +4,12 @@
   "description": "Video transcoding backend with BullMQ and R2",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "dev:worker": "tsx watch src/worker.ts",
+    "dev": "tsx watch src/app/start.ts",
+    "dev:worker": "tsx watch src/workers/analytics.worker.ts",
     "dev:all": "npx -y concurrently \"npm run dev\" \"npm run dev:worker\"",
     "build": "tsc",
-    "start": "node dist/index.js",
-    "start:worker": "node dist/worker.js",
+    "start": "node dist/app/start.js",
+    "start:worker": "node dist/workers/analytics.worker.js",
     "worker": "tsx src/workers/transcodeWorker.ts",
     "seed:admin": "tsx scripts/seedAdmin.ts"
   },

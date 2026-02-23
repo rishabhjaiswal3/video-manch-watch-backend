@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { authenticate } from '../../middleware/auth.js';
-import { uploadLimiter } from '../../middleware/rateLimiter.js';
+import { authenticate } from '../../shared/middleware/auth.js';
+import { uploadLimiter } from '../../shared/middleware/rateLimiter.js';
 import { UploadController } from './controllers/upload.controller.js';
 
 const router = Router();

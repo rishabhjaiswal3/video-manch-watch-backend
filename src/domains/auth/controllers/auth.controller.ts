@@ -1,10 +1,47 @@
 import { Request, Response } from 'express';
 import { AuthService } from '../services/auth.service.js';
-import { ensureAuthenticatedUser } from '../../../utils/authHelpers.js';
+import { ensureAuthenticatedUser } from '../../../shared/utils/authHelpers.js';
 
 const authService = new AuthService();
 
 export class AuthController {
+    private async handleRoleLoginFlow(
+        role: 'user' | 'creator',
+        req: Request,
+        res: Response
+    ) {
+        const { email, password, otp } = req.body;
+
+        if (!password && !otp) {
+            const result = await authService.startRoleLogin(role, email);
+            return res.status(200).json({
+                success: true,
+                data: result,
+            });
+        }
+
+        if (password && !otp) {
+            const result = await authService.loginWithRolePassword(role, email, password);
+            return res.status(200).json({
+                success: true,
+                data: result,
+            });
+        }
+
+        if (password && otp) {
+            const result = await authService.verifySignupOtpAndCreate(role, email, otp, password);
+            return res.status(200).json({
+                success: true,
+                data: result,
+            });
+        }
+
+        return res.status(400).json({
+            success: false,
+            error: 'Invalid login request. Provide email only, email+password, or email+password+otp.',
+        });
+    }
+
 
     async signup(req: Request, res: Response) {
         try {
@@ -60,27 +97,12 @@ export class AuthController {
         }
     }
 
-    async loginUserWithOtp(req: Request, res: Response) {
+    async loginUser(req: Request, res: Response) {
         try {
-            const { email, otp } = req.body;
-
-            if (!otp) {
-                const result = await authService.requestLoginOtp('user', email);
-                return res.status(200).json({
-                    success: true,
-                    data: result,
-                    message: 'OTP sent to your email.',
-                });
-            }
-
-            const result = await authService.verifyLoginOtp('user', email, otp);
-            return res.status(200).json({
-                success: true,
-                data: result,
-            });
+            return await this.handleRoleLoginFlow('user', req, res);
         } catch (error: any) {
-            const message = error?.message || 'OTP login failed.';
-            const status = message.includes('Invalid OTP') || message.includes('expired')
+            const message = error?.message || 'User login failed.';
+            const status = message.includes('Invalid OTP') || message.includes('expired') || message.includes('Invalid email or password')
                 ? 401
                 : message.includes('account found')
                     ? 404
@@ -97,27 +119,12 @@ export class AuthController {
         }
     }
 
-    async loginCreatorWithOtp(req: Request, res: Response) {
+    async loginCreator(req: Request, res: Response) {
         try {
-            const { email, otp } = req.body;
-
-            if (!otp) {
-                const result = await authService.requestLoginOtp('creator', email);
-                return res.status(200).json({
-                    success: true,
-                    data: result,
-                    message: 'OTP sent to your email.',
-                });
-            }
-
-            const result = await authService.verifyLoginOtp('creator', email, otp);
-            return res.status(200).json({
-                success: true,
-                data: result,
-            });
+            return await this.handleRoleLoginFlow('creator', req, res);
         } catch (error: any) {
-            const message = error?.message || 'OTP login failed.';
-            const status = message.includes('Invalid OTP') || message.includes('expired')
+            const message = error?.message || 'Creator login failed.';
+            const status = message.includes('Invalid OTP') || message.includes('expired') || message.includes('Invalid email or password')
                 ? 401
                 : message.includes('account found')
                     ? 404
@@ -131,6 +138,76 @@ export class AuthController {
                 success: false,
                 error: message,
             });
+        }
+    }
+
+    async requestUserPasswordReset(req: Request, res: Response) {
+        try {
+            const { email } = req.body;
+            const result = await authService.requestPasswordResetOtp('user', email);
+            return res.status(200).json({
+                success: true,
+                data: result,
+                message: 'OTP sent to your email.',
+            });
+        } catch (error: any) {
+            const message = error?.message || 'Failed to request password reset.';
+            const status = message.includes('account found') ? 404 : 500;
+            return res.status(status).json({ success: false, error: message });
+        }
+    }
+
+    async requestCreatorPasswordReset(req: Request, res: Response) {
+        try {
+            const { email } = req.body;
+            const result = await authService.requestPasswordResetOtp('creator', email);
+            return res.status(200).json({
+                success: true,
+                data: result,
+                message: 'OTP sent to your email.',
+            });
+        } catch (error: any) {
+            const message = error?.message || 'Failed to request password reset.';
+            const status = message.includes('account found') ? 404 : 500;
+            return res.status(status).json({ success: false, error: message });
+        }
+    }
+
+    async resetUserPassword(req: Request, res: Response) {
+        try {
+            const { email, otp, password, currentPassword } = req.body;
+            const result = await authService.resetPasswordWithOtp('user', email, otp, password, currentPassword);
+            return res.status(200).json({
+                success: true,
+                data: result,
+            });
+        } catch (error: any) {
+            const message = error?.message || 'Failed to reset password.';
+            const status = message.includes('Invalid OTP') || message.includes('expired') || message.includes('Current password is incorrect')
+                ? 401
+                : message.includes('account found')
+                    ? 404
+                    : 500;
+            return res.status(status).json({ success: false, error: message });
+        }
+    }
+
+    async resetCreatorPassword(req: Request, res: Response) {
+        try {
+            const { email, otp, password, currentPassword } = req.body;
+            const result = await authService.resetPasswordWithOtp('creator', email, otp, password, currentPassword);
+            return res.status(200).json({
+                success: true,
+                data: result,
+            });
+        } catch (error: any) {
+            const message = error?.message || 'Failed to reset password.';
+            const status = message.includes('Invalid OTP') || message.includes('expired') || message.includes('Current password is incorrect')
+                ? 401
+                : message.includes('account found')
+                    ? 404
+                    : 500;
+            return res.status(status).json({ success: false, error: message });
         }
     }
 

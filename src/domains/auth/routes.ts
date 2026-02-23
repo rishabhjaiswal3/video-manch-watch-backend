@@ -1,9 +1,16 @@
 import { Router } from 'express';
 import { AuthController } from './controllers/auth.controller.js';
-import { validate } from '../../middleware/validate.js';
-import { signupSchema, loginSchema, otpLoginSchema, refreshTokenSchema } from '../../schemas/auth.js';
-import { authLimiter } from '../../middleware/rateLimiter.js';
-import { authenticate } from '../../middleware/auth.js';
+import { validate } from '../../shared/middleware/validate.js';
+import {
+  signupSchema,
+  loginSchema,
+  roleLoginFlowSchema,
+  passwordResetRequestSchema,
+  passwordResetConfirmSchema,
+  refreshTokenSchema,
+} from '../../shared/schemas/auth.js';
+import { authLimiter } from '../../shared/middleware/rateLimiter.js';
+import { authenticate } from '../../shared/middleware/auth.js';
 
 const router = Router();
 const authController = new AuthController();
@@ -16,8 +23,20 @@ router.use(authLimiter as any);
  */
 router.post('/signup', validate(signupSchema), (req, res) => authController.signup(req, res));
 router.post('/login', validate(loginSchema), (req, res) => authController.login(req, res));
-router.post('/login/user', validate(otpLoginSchema), (req, res) => authController.loginUserWithOtp(req, res));
-router.post('/login/creator', validate(otpLoginSchema), (req, res) => authController.loginCreatorWithOtp(req, res));
+router.post('/login/user', validate(roleLoginFlowSchema), (req, res) => authController.loginUser(req, res));
+router.post('/login/creator', validate(roleLoginFlowSchema), (req, res) => authController.loginCreator(req, res));
+router.post('/password/user/request', validate(passwordResetRequestSchema), (req, res) =>
+  authController.requestUserPasswordReset(req, res)
+);
+router.post('/password/creator/request', validate(passwordResetRequestSchema), (req, res) =>
+  authController.requestCreatorPasswordReset(req, res)
+);
+router.post('/password/user/reset', validate(passwordResetConfirmSchema), (req, res) =>
+  authController.resetUserPassword(req, res)
+);
+router.post('/password/creator/reset', validate(passwordResetConfirmSchema), (req, res) =>
+  authController.resetCreatorPassword(req, res)
+);
 router.post('/refresh', validate(refreshTokenSchema), (req, res) => authController.refresh(req, res));
 
 /**

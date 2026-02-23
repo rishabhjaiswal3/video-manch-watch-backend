@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { SubscriptionService } from '../services/subscription.service.js';
-import { ensureAuthenticatedUser } from '../../../utils/authHelpers.js';
+import { ensureAuthenticatedUser } from '../../../shared/utils/authHelpers.js';
 
 const subscriptionService = new SubscriptionService();
 

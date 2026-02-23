@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { ProfileService } from '../services/profile.service.js';
-import { ensureAuthenticatedUser } from '../../../utils/authHelpers.js';
+import { ensureAuthenticatedUser } from '../../../shared/utils/authHelpers.js';
 
 const profileService = new ProfileService();
 

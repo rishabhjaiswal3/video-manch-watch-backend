@@ -5,7 +5,7 @@ import {
   MSG91_EMAIL_API_URL,
   TEMPLATE_IDS,
   TEMPLATE_VARIABLES,
-} from '../constants/loginEmailConstants.js';
+} from '../../shared/constants/loginEmailConstants.js';
 
 interface Recipient {
   email: string;

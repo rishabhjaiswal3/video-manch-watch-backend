@@ -1,5 +1,5 @@
-import { WatchLater } from '../../../models/WatchLater.js';
-import { Video } from '../../../models/Video.js';
+import { WatchLater } from '../../../shared/models/WatchLater.js';
+import { Video } from '../../../shared/models/Video.js';
 
 export class WatchLaterService {
   /** Add a video to the user's watch later list */

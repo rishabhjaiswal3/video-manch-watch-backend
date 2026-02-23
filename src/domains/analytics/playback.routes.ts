@@ -16,4 +16,4 @@
  *   GET  /api/playback/user/:userId/stats
  */
 
-export { default } from '../../routes/playback.js';
+export { default } from './routes/playback.route.impl.js';

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { WatchLaterController } from './controllers/watchLater.controller.js';
-import { authenticate } from '../../middleware/auth.js';
+import { authenticate } from '../../shared/middleware/auth.js';
 
 const router = Router();
 const controller = new WatchLaterController();
