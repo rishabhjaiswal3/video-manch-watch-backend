@@ -24,9 +24,19 @@ interface EmailResult {
   error?: string;
 }
 
+interface Msg91Response {
+  message?: string;
+  request_id?: string;
+  errors?: string;
+  code?: string;
+  apiError?: string;
+  status?: string;
+  hasError?: boolean;
+}
 
 async function sendEmail(options: SendEmailOptions): Promise<EmailResult> {
-  const authKey = process.env.MSG91_AUTH_KEY;
+  const rawAuthKey = process.env.MSG91_AUTH_KEY;
+  const authKey = rawAuthKey?.trim();
 
   if (!authKey) {
     console.error('[EmailService] MSG91_AUTH_KEY is not set');
@@ -48,9 +58,15 @@ async function sendEmail(options: SendEmailOptions): Promise<EmailResult> {
     template_id: options.templateId,
   };
 
-  console.log("body is ",body);
-
   try {
+    const keyFingerprint = `${authKey.slice(0, 4)}...${authKey.slice(-2)} (len=${authKey.length})`;
+    console.log('[EmailService] Sending MSG91 email', {
+      url: MSG91_EMAIL_API_URL,
+      templateId: options.templateId,
+      recipients: recipients.map((r) => r.email),
+      keyFingerprint,
+    });
+
     const response = await fetch(MSG91_EMAIL_API_URL, {
       method: 'POST',
       headers: {
@@ -60,11 +76,29 @@ async function sendEmail(options: SendEmailOptions): Promise<EmailResult> {
       body: JSON.stringify(body),
     });
 
-    const data = (await response.json()) as { message?: string; request_id?: string };
+    let data: Msg91Response = {};
+    try {
+      data = (await response.json()) as Msg91Response;
+    } catch {
+      data = {};
+    }
 
     if (!response.ok) {
-      console.error('[EmailService] MSG91 error:', data);
-      return { success: false, error: data.message ?? 'Unknown error from MSG91' };
+      const detailedError =
+        data.errors ||
+        data.message ||
+        `MSG91 HTTP ${response.status}`;
+
+      console.error('[EmailService] MSG91 error:', {
+        httpStatus: response.status,
+        statusText: response.statusText,
+        response: data,
+      });
+
+      return {
+        success: false,
+        error: detailedError,
+      };
     }
 
     console.log(`[EmailService] ✅ Email sent to ${recipients.map((r) => r.email).join(', ')}`);
