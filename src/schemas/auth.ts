@@ -21,6 +21,14 @@ export const loginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 });
 
+export const otpLoginSchema = z.object({
+  email: z
+    .string()
+    .email('Invalid email format')
+    .transform((val) => val.toLowerCase().trim()),
+  otp: z.string().trim().length(6, 'OTP must be 6 digits').optional(),
+});
+
 export const refreshTokenSchema = z.object({
   refreshToken: z.string().min(1, 'Refresh token is required'),
 });
@@ -31,4 +39,5 @@ export const logoutSchema = z.object({
 
 export type SignupInput = z.infer<typeof signupSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
+export type OtpLoginInput = z.infer<typeof otpLoginSchema>;
 export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>;

@@ -1,6 +1,8 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { User } from '../../../models/User.js';
+import { getRedisConnection } from '../../../config/redis.js';
+import { sendOtpEmail } from '../../../services/emailService.js';
 
 export interface AuthSuccess {
     user: {
@@ -13,6 +15,20 @@ export interface AuthSuccess {
 }
 
 export class AuthService {
+    private static readonly OTP_TTL_SECONDS = 10 * 60;
+
+    private normalizeEmail(email: string): string {
+        return email.toLowerCase().trim();
+    }
+
+    private buildOtpKey(role: 'user' | 'creator', email: string): string {
+        return `login_${role}_${email}`;
+    }
+
+    private generateOtp(): string {
+        return Math.floor(100000 + Math.random() * 900000).toString();
+    }
+
     /**
      * Helper to generate tokens
      */
@@ -67,6 +83,78 @@ export class AuthService {
         if (!isMatch) {
             throw new Error('Invalid email or password.');
         }
+
+        const { accessToken, refreshToken } = this.generateTokens(user._id.toString(), user.email, user.userType);
+
+        user.refreshToken = await bcrypt.hash(refreshToken, 10);
+        await user.save();
+
+        return {
+            user: {
+                id: user._id.toString(),
+                email: user.email,
+                userType: user.userType,
+            },
+            accessToken,
+            refreshToken,
+        };
+    }
+
+    /**
+     * Send OTP for role-based login.
+     * Request body pattern:
+     *   { email } -> sends OTP and stores in Redis with TTL.
+     */
+    async requestLoginOtp(role: 'user' | 'creator', email: string): Promise<{ otpSent: boolean; ttlSeconds: number }> {
+        const normalizedEmail = this.normalizeEmail(email);
+        const user = await User.findOne({ email: normalizedEmail, userType: role });
+        if (!user) {
+            throw new Error(`No ${role} account found for this email.`);
+        }
+
+        const otp = this.generateOtp();
+        const redis = getRedisConnection();
+        const key = this.buildOtpKey(role, normalizedEmail);
+
+        await redis.set(key, otp, 'EX', AuthService.OTP_TTL_SECONDS);
+
+        const emailResult = await sendOtpEmail(
+            { email: normalizedEmail, name: normalizedEmail.split('@')[0] },
+            otp
+        );
+
+        if (!emailResult.success) {
+            throw new Error(emailResult.error || 'Failed to send OTP email.');
+        }
+
+        return { otpSent: true, ttlSeconds: AuthService.OTP_TTL_SECONDS };
+    }
+
+    /**
+     * Verify OTP and return auth tokens.
+     * Request body pattern:
+     *   { email, otp } -> verifies OTP and logs user in.
+     */
+    async verifyLoginOtp(role: 'user' | 'creator', email: string, otp: string): Promise<AuthSuccess> {
+        const normalizedEmail = this.normalizeEmail(email);
+        const user = await User.findOne({ email: normalizedEmail, userType: role });
+        if (!user) {
+            throw new Error(`No ${role} account found for this email.`);
+        }
+
+        const redis = getRedisConnection();
+        const key = this.buildOtpKey(role, normalizedEmail);
+        const storedOtp = await redis.get(key);
+
+        if (!storedOtp) {
+            throw new Error('OTP expired. Please request a new OTP.');
+        }
+
+        if (storedOtp !== otp.trim()) {
+            throw new Error('Invalid OTP.');
+        }
+
+        await redis.del(key);
 
         const { accessToken, refreshToken } = this.generateTokens(user._id.toString(), user.email, user.userType);
 

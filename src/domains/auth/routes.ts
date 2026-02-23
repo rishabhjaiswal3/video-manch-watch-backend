@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { AuthController } from './controllers/auth.controller.js';
 import { validate } from '../../middleware/validate.js';
-import { signupSchema, loginSchema, refreshTokenSchema } from '../../schemas/auth.js';
+import { signupSchema, loginSchema, otpLoginSchema, refreshTokenSchema } from '../../schemas/auth.js';
 import { authLimiter } from '../../middleware/rateLimiter.js';
 import { authenticate } from '../../middleware/auth.js';
 
@@ -16,6 +16,8 @@ router.use(authLimiter as any);
  */
 router.post('/signup', validate(signupSchema), (req, res) => authController.signup(req, res));
 router.post('/login', validate(loginSchema), (req, res) => authController.login(req, res));
+router.post('/login/user', validate(otpLoginSchema), (req, res) => authController.loginUserWithOtp(req, res));
+router.post('/login/creator', validate(otpLoginSchema), (req, res) => authController.loginCreatorWithOtp(req, res));
 router.post('/refresh', validate(refreshTokenSchema), (req, res) => authController.refresh(req, res));
 
 /**
