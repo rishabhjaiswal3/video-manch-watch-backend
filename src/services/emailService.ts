@@ -1,5 +1,3 @@
-
-
 import {
   EMAIL_DOMAIN,
   EMAIL_FROM,
@@ -8,8 +6,6 @@ import {
   TEMPLATE_IDS,
   TEMPLATE_VARIABLES,
 } from '../constants/loginEmailConstants.js';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Recipient {
   email: string;
