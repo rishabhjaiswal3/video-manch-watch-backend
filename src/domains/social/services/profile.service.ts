@@ -166,9 +166,13 @@ export class ProfileService {
       R2_BUCKETS.USER_ASSETS
     );
 
+    console.log(`[Profile] Avatar presigned URL generated`);
+    console.log(`[Profile] R2 key (storage path): ${uploadUrl.key}`);
+    console.log(`[Profile] Upload URL: ${uploadUrl.uploadUrl.split('?')[0]}`);
+
     return {
       uploadUrl: uploadUrl.uploadUrl,
-      key: uploadUrl.key,   // actual path r2Service wrote: user/{userId}/{fileId}/original/{fileId}.ext
+      key: uploadUrl.key,
       expiresIn: uploadUrl.expiresIn,
     };
   }
@@ -185,7 +189,6 @@ export class ProfileService {
 
     const fileId = uuidv4();
     const extension = filename.split('.').pop() || 'jpg';
-    const key = `banners/${userId}/${fileId}.${extension}`;
 
     const uploadUrl = await r2Service.getUploadPresignedUrl(
       userId,
@@ -196,9 +199,13 @@ export class ProfileService {
       R2_BUCKETS.USER_ASSETS
     );
 
+    console.log(`[Profile] Banner presigned URL generated`);
+    console.log(`[Profile] R2 key (storage path): ${uploadUrl.key}`);
+    console.log(`[Profile] Upload URL: ${uploadUrl.uploadUrl.split('?')[0]}`);
+
     return {
       uploadUrl: uploadUrl.uploadUrl,
-      key: `banners/${userId}/${fileId}.${extension}`,
+      key: uploadUrl.key,
       expiresIn: uploadUrl.expiresIn,
     };
   }
