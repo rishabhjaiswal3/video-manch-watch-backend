@@ -22,6 +22,10 @@ export const getR2Client = (): S3Client => {
       accessKeyId,
       secretAccessKey,
     },
+    // R2 does not support AWS SDK v3 automatic checksums — disable them
+    // to prevent CRC32 mismatch 403s on presigned PutObject requests.
+    requestChecksumCalculation: 'WHEN_REQUIRED',
+    responseChecksumValidation: 'WHEN_REQUIRED',
   });
 
   return r2Client;
