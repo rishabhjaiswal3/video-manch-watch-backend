@@ -39,7 +39,7 @@ export class ProfileController {
   async getMyProfile(req: Request, res: Response) {
     try {
       const { userId } = ensureAuthenticatedUser(req);
-      const profile = await profileService.getProfileByUserId(userId);
+      const profile = await profileService.getProfileData(userId);
 
       if (!profile) {
         return res.status(404).json({

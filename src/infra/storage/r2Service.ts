@@ -16,22 +16,23 @@ export const r2Service = {
   /**
    * Generate a presigned URL for uploading a video directly to R2
    */
-  async getUploadPresignedUrl(
+    async getUploadPresignedUrl(
     userId: string,
     videoId: string,
     filename: string,
     contentType: string,
-    userType: 'user' | 'creator' | 'admin' = 'user'
+    userType: 'user' | 'creator' | 'admin' = 'user',
+    bucket: string = R2_BUCKETS.RAW
   ): Promise<PresignedUrlResponse> {
     const client = getR2Client();
     const key = `${userType}/${userId}/${videoId}/original/${filename}`;
     const expiresIn = PRESIGNED_URL_EXPIRY_SECONDS;
 
     console.log(`[R2] 🔑 Generating presigned upload URL`);
-    console.log(`[R2] 📂 Bucket: ${R2_BUCKETS.RAW}, Key: ${key}`);
+    console.log(`[R2] 📂 Bucket: ${bucket}, Key: ${key}`);
 
     const command = new PutObjectCommand({
-      Bucket: R2_BUCKETS.RAW,
+      Bucket: bucket,
       Key: key,
       ContentType: contentType,
     });

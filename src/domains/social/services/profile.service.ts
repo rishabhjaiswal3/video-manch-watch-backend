@@ -3,14 +3,90 @@ import { Video } from '../../../shared/models/Video.js';
 import { r2Service } from '../../../infra/storage/r2Service.js';
 import { R2_BUCKETS } from '../../../shared/config/r2.js';
 import { v4 as uuidv4 } from 'uuid';
+import { User } from '../../../shared/models/User.js';
+import { SubscriptionService } from './subscription.service.js';
 import type { CreateProfileInput, UpdateProfileInput } from '../../../shared/schemas/social.js';
+import type { Document } from 'mongoose';
+
+const DEFAULT_AVATAR_URL = process.env.DEFAULT_PROFILE_AVATAR_URL || '/placeholder.svg';
 
 export class ProfileService {
+  private subscriptionService = new SubscriptionService();
+
+  private sanitizeUsername(input?: string): string {
+    const raw = (input || 'user').split('@')[0] || 'user';
+    const cleaned = raw.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
+    return cleaned || 'user';
+  }
+
+  private async generateUniqueUsername(baseInput?: string): Promise<string> {
+    const base = this.sanitizeUsername(baseInput);
+    let username = base;
+    let suffix = 0;
+    // Avoid collisions
+    while (await Profile.exists({ username })) {
+      suffix += 1;
+      username = `${base}${suffix}`;
+    }
+    return username;
+  }
+
+  private async ensureProfileExists(userId: string, email?: string): Promise<Document | null> {
+    let profile = await Profile.findOne({ userId });
+    if (profile) return profile;
+
+    const userEmail = email || (await User.findById(userId).select('email').lean())?.email;
+    const username = await this.generateUniqueUsername(userEmail);
+    profile = new Profile({
+      userId,
+      username,
+      displayName: username,
+      avatar: DEFAULT_AVATAR_URL,
+    });
+    await profile.save();
+    return profile;
+  }
   /**
    * Get profile by user ID
    */
   async getProfileByUserId(userId: string) {
     return Profile.findOne({ userId }).lean();
+  }
+
+  async getProfileData(userId: string) {
+    const profileDoc = await Profile.findOne({ userId }).lean();
+    const user = await User.findById(userId).lean();
+
+    if (!profileDoc && !user) {
+      return null;
+    }
+
+    let profile = profileDoc;
+    if (!profile) {
+      const ensured = await this.ensureProfileExists(userId, user?.email);
+      profile = ensured ? ensured.toObject() : null;
+    }
+
+    if (!profile) {
+      return null;
+    }
+
+    const [subscribersResult, followingResult] = await Promise.all([
+      this.subscriptionService.getSubscribers(userId, 1, 5),
+      this.subscriptionService.getFollowing(userId, 1, 5),
+    ]);
+
+    return {
+      ...profile,
+      email: user?.email,
+      avatar: profile.avatar || DEFAULT_AVATAR_URL,
+      bio: profile.bio || '',
+      links: profile.links || [],
+      subscribers: subscribersResult.subscribers,
+      subscribersCount: subscribersResult.pagination.total,
+      following: followingResult.channels,
+      followingCount: followingResult.pagination.total,
+    };
   }
 
   /**
@@ -75,10 +151,7 @@ export class ProfileService {
     filename: string,
     mimeType: string
   ): Promise<{ uploadUrl: string; key: string; expiresIn: number }> {
-    const profile = await Profile.findOne({ userId });
-    if (!profile) {
-      throw new Error('Profile not found. Create a profile first.');
-    }
+    await this.ensureProfileExists(userId);
 
     const fileId = uuidv4();
     const extension = filename.split('.').pop() || 'jpg';
@@ -89,7 +162,8 @@ export class ProfileService {
       fileId,
       `${fileId}.${extension}`,
       mimeType,
-      'user'
+      'user',
+      R2_BUCKETS.USER_ASSETS
     );
 
     // Store the key for later update
@@ -108,10 +182,7 @@ export class ProfileService {
     filename: string,
     mimeType: string
   ): Promise<{ uploadUrl: string; key: string; expiresIn: number }> {
-    const profile = await Profile.findOne({ userId });
-    if (!profile) {
-      throw new Error('Profile not found. Create a profile first.');
-    }
+    await this.ensureProfileExists(userId);
 
     const fileId = uuidv4();
     const extension = filename.split('.').pop() || 'jpg';
@@ -122,7 +193,8 @@ export class ProfileService {
       fileId,
       `${fileId}.${extension}`,
       mimeType,
-      'user'
+      'user',
+      R2_BUCKETS.USER_ASSETS
     );
 
     return {

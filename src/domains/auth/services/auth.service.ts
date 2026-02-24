@@ -57,7 +57,7 @@ export class AuthService {
     private generateTokens(userId: string, email: string, userType: string) {
         const accessSecret = process.env.JWT_SECRET!;
         const refreshSecret = process.env.REFRESH_TOKEN_SECRET!;
-        const accessExpiry = (process.env.JWT_EXPIRES_IN || '15m') as jwt.SignOptions['expiresIn'];
+        const accessExpiry = (process.env.JWT_EXPIRES_IN || '2d') as jwt.SignOptions['expiresIn'];
         const refreshExpiry = (process.env.REFRESH_TOKEN_EXPIRES_IN || '7d') as jwt.SignOptions['expiresIn'];
 
         const accessToken = jwt.sign({ userId, email, userType }, accessSecret, { expiresIn: accessExpiry });
