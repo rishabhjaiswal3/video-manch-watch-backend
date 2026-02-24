@@ -166,10 +166,9 @@ export class ProfileService {
       R2_BUCKETS.USER_ASSETS
     );
 
-    // Store the key for later update
     return {
       uploadUrl: uploadUrl.uploadUrl,
-      key: `avatars/${userId}/${fileId}.${extension}`,
+      key: uploadUrl.key,   // actual path r2Service wrote: user/{userId}/{fileId}/original/{fileId}.ext
       expiresIn: uploadUrl.expiresIn,
     };
   }
