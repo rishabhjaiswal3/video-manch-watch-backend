@@ -58,8 +58,9 @@ export const uploadAssetSchema = z.object({
   fileSize: z
     .number()
     .min(1, 'File size must be greater than 0')
-    .max(5 * 1024 * 1024, 'File size cannot exceed 5MB'),
+    .max(20 * 1024 * 1024, 'File size cannot exceed 20MB'),
 });
+
 
 // Comment schemas
 export const createCommentSchema = z.object({

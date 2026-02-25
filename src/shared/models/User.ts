@@ -5,6 +5,7 @@ export interface IUser extends Document {
   email: string;
   password: string;
   userType: 'user' | 'creator' | 'admin';
+  roles: Array<'user' | 'creator' | 'admin'>;
   refreshToken?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -31,6 +32,11 @@ const UserSchema = new Schema<IUser>(
       enum: ['user', 'creator', 'admin'],
       default: 'user',
     },
+    roles: {
+      type: [String],
+      enum: ['user', 'creator', 'admin'],
+      default: ['user'],
+    },
     refreshToken: {
       type: String,
     },
@@ -46,6 +52,22 @@ UserSchema.pre('save', async function (next) {
 
   const salt = await bcrypt.genSalt(12);
   this.password = await bcrypt.hash(this.password, salt);
+  next();
+});
+
+// Keep role array and active role aligned for backward compatibility.
+UserSchema.pre('save', function (next) {
+  const roleSet = new Set(this.roles || []);
+  if (this.userType) {
+    roleSet.add(this.userType);
+  }
+  if (!roleSet.size) {
+    roleSet.add('user');
+  }
+  this.roles = Array.from(roleSet) as Array<'user' | 'creator' | 'admin'>;
+  if (!this.roles.includes(this.userType)) {
+    this.userType = this.roles[0];
+  }
   next();
 });
 

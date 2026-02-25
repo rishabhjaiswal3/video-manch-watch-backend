@@ -1,8 +1,13 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { ProfileController } from './controllers/profile.controller.js';
 import { validate } from '../../shared/middleware/validate.js';
-import { createProfileSchema, updateProfileSchema, uploadAssetSchema } from '../../shared/schemas/social.js';
+import {
+  createProfileSchema,
+  updateProfileSchema,
+  uploadAssetSchema,
+} from '../../shared/schemas/social.js';
 import { authenticate } from '../../shared/middleware/auth.js';
+import { uploadLimiter } from '../../shared/middleware/rateLimiter.js';
 
 const router = Router();
 const profileController = new ProfileController();
@@ -27,6 +32,16 @@ router.patch('/me', authenticate, validate(updateProfileSchema), (req, res) =>
 router.post('/me/avatar', authenticate, validate(uploadAssetSchema), (req, res) =>
   profileController.getAvatarUploadUrl(req, res)
 );
+router.post(
+  '/me/avatar/direct',
+  authenticate,
+  uploadLimiter as any,
+  express.raw({
+    type: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+    limit: '20mb',
+  }),
+  (req, res) => profileController.uploadAvatarDirect(req, res)
+);
 
 // Confirm avatar upload
 router.patch('/me/avatar', authenticate, (req, res) =>
@@ -36,6 +51,16 @@ router.patch('/me/avatar', authenticate, (req, res) =>
 // Get presigned URL for banner upload
 router.post('/me/banner', authenticate, validate(uploadAssetSchema), (req, res) =>
   profileController.getBannerUploadUrl(req, res)
+);
+router.post(
+  '/me/banner/direct',
+  authenticate,
+  uploadLimiter as any,
+  express.raw({
+    type: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+    limit: '20mb',
+  }),
+  (req, res) => profileController.uploadBannerDirect(req, res)
 );
 
 // Confirm banner upload

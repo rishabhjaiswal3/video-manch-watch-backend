@@ -5,7 +5,7 @@ import type { AuthenticatedUser } from '../types/requests.js';
 interface TokenPayload {
   userId: string;
   email: string;
-  userType: 'user' | 'creator';
+  userType: 'user' | 'creator' | 'admin';
 }
 
 export const authenticate = (

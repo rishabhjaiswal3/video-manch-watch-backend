@@ -24,15 +24,15 @@ export const authLimiter = rateLimit({
   },
 });
 
-// Upload rate limiter — 3 uploads per hour
+// Upload rate limiter
 export const uploadLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 100,
+  max: 30,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
     success: false,
-    error: 'Upload limit reached. You can upload 3 videos per hour.',
+    error: 'Upload limit reached. Please try again later.',
   },
 });
 

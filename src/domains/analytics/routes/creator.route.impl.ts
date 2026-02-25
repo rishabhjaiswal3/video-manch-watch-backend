@@ -10,6 +10,7 @@ const QUALITY_BUCKETS = ['1080p', '720p', '480p', '360p', '240p'];
 const CONTENT_TYPE_BUCKETS = ['vod', 'live', 'reel'];
 const RESOLUTION_BUCKETS = ['4K+', '1080p', '720p', '480p', '360p', 'Other'];
 const MAX_TREND_DAYS = 30;
+const VIDEO_SORT_ALLOWLIST = new Set(['createdAt', 'title', 'status', 'duration', 'updatedAt']);
 
 /**
  * GET /api/analytics/overview
@@ -210,7 +211,9 @@ router.get('/videos', async (req: Request, res: Response) => {
     const { page = 1, limit = 10, status, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
 
     const skip = (Number(page) - 1) * Number(limit);
-    const sortOptions: Record<string, 1 | -1> = { [sortBy as string]: sortOrder === 'asc' ? 1 : -1 };
+    const sortField = String(sortBy);
+    const safeSortField = VIDEO_SORT_ALLOWLIST.has(sortField) ? sortField : 'createdAt';
+    const sortOptions: Record<string, 1 | -1> = { [safeSortField]: sortOrder === 'asc' ? 1 : -1 };
 
     const query: Record<string, unknown> = { userId };
     if (status && status !== 'all') {

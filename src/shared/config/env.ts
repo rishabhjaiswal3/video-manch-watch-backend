@@ -156,7 +156,13 @@ export function validateEnvironment(): ValidationResult {
     }
 
     if (jwtSecret === refreshSecret) {
-      warnings.push('JWT_SECRET and REFRESH_TOKEN_SECRET should be different');
+      errors.push('JWT_SECRET and REFRESH_TOKEN_SECRET must be different');
+    }
+  }
+
+  if (process.env.JWT_SECRET && process.env.REFRESH_TOKEN_SECRET) {
+    if (process.env.JWT_SECRET === process.env.REFRESH_TOKEN_SECRET) {
+      errors.push('JWT_SECRET and REFRESH_TOKEN_SECRET must be different');
     }
   }
 

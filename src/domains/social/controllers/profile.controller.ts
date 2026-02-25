@@ -3,6 +3,7 @@ import { ProfileService } from '../services/profile.service.js';
 import { ensureAuthenticatedUser } from '../../../shared/utils/authHelpers.js';
 
 const profileService = new ProfileService();
+const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
 export class ProfileController {
   /**
@@ -230,6 +231,60 @@ export class ProfileController {
       return res.status(500).json({
         success: false,
         error: 'Failed to update banner',
+      });
+    }
+  }
+
+  async uploadAvatarDirect(req: Request, res: Response) {
+    try {
+      const { userId } = ensureAuthenticatedUser(req);
+      const mimeType = String(req.headers['content-type'] || '').split(';')[0].trim();
+      if (!ALLOWED_IMAGE_MIME_TYPES.has(mimeType)) {
+        return res.status(400).json({ success: false, error: 'Unsupported image type' });
+      }
+      const fileBuffer = req.body as Buffer;
+      if (!Buffer.isBuffer(fileBuffer) || fileBuffer.length === 0) {
+        return res.status(400).json({ success: false, error: 'File is required' });
+      }
+      const result = await profileService.uploadAssetDirect(
+        userId,
+        'avatar',
+        mimeType,
+        fileBuffer
+      );
+      return res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      console.error('[PROFILE] Direct avatar upload error:', error);
+      return res.status(400).json({
+        success: false,
+        error: error?.message || 'Failed to upload avatar',
+      });
+    }
+  }
+
+  async uploadBannerDirect(req: Request, res: Response) {
+    try {
+      const { userId } = ensureAuthenticatedUser(req);
+      const mimeType = String(req.headers['content-type'] || '').split(';')[0].trim();
+      if (!ALLOWED_IMAGE_MIME_TYPES.has(mimeType)) {
+        return res.status(400).json({ success: false, error: 'Unsupported image type' });
+      }
+      const fileBuffer = req.body as Buffer;
+      if (!Buffer.isBuffer(fileBuffer) || fileBuffer.length === 0) {
+        return res.status(400).json({ success: false, error: 'File is required' });
+      }
+      const result = await profileService.uploadAssetDirect(
+        userId,
+        'banner',
+        mimeType,
+        fileBuffer
+      );
+      return res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      console.error('[PROFILE] Direct banner upload error:', error);
+      return res.status(400).json({
+        success: false,
+        error: error?.message || 'Failed to upload banner',
       });
     }
   }

@@ -6,6 +6,8 @@ import { getNumericEnv } from '../../../shared/config/env.js';
 import { generateSignedUrl, verifySignedUrl } from '../../../shared/utils/signedUrl.js';
 import { r2Service } from '../../../infra/storage/r2Service.js';
 import { R2_BUCKETS } from '../../../shared/config/r2.js';
+import { authenticate } from '../../../shared/middleware/auth.js';
+import { ensureAuthenticatedUser } from '../../../shared/utils/authHelpers.js';
 import {
     pushEventsToRedis,
     updateActiveSession,
@@ -42,6 +44,16 @@ function formatDuration(seconds: number): string {
     if (minutes > 0) return `${minutes}m ${secs}s`;
     return `${secs}s`;
 }
+
+const ensureCanAccessUserAnalytics = (req: Request, res: Response): boolean => {
+    const authUser = ensureAuthenticatedUser(req);
+    const requestedUserId = req.params.userId;
+    if (authUser.userType !== 'admin' && authUser.userId !== requestedUserId) {
+        res.status(403).json({ success: false, error: 'Forbidden.' });
+        return false;
+    }
+    return true;
+};
 
 // ==========================================
 // EVENTS API — Receives player events, pushes to Redis
@@ -307,8 +319,9 @@ router.get('/overview', async (req: Request, res: Response) => {
  * GET /api/playback/user/:userId/history
  * Get a user's watch history (recently watched videos)
  */
-router.get('/user/:userId/history', async (req: Request, res: Response) => {
+router.get('/user/:userId/history', authenticate, async (req: Request, res: Response) => {
     try {
+        if (!ensureCanAccessUserAnalytics(req, res)) return;
         const { userId } = req.params;
         const { page = 1, limit = 20 } = req.query;
 
@@ -358,8 +371,9 @@ router.get('/user/:userId/history', async (req: Request, res: Response) => {
  * GET /api/playback/user/:userId/continue
  * Get videos the user started but hasn't finished (for "Continue Watching")
  */
-router.get('/user/:userId/continue', async (req: Request, res: Response) => {
+router.get('/user/:userId/continue', authenticate, async (req: Request, res: Response) => {
     try {
+        if (!ensureCanAccessUserAnalytics(req, res)) return;
         const { userId } = req.params;
         const { limit = 10 } = req.query;
 
@@ -396,8 +410,9 @@ router.get('/user/:userId/continue', async (req: Request, res: Response) => {
  * GET /api/playback/user/:userId/stats
  * Get a user's overall watching statistics
  */
-router.get('/user/:userId/stats', async (req: Request, res: Response) => {
+router.get('/user/:userId/stats', authenticate, async (req: Request, res: Response) => {
     try {
+        if (!ensureCanAccessUserAnalytics(req, res)) return;
         const { userId } = req.params;
 
         const [summary, recentHistory] = await Promise.all([

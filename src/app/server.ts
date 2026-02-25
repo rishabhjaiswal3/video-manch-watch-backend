@@ -33,8 +33,41 @@ export function createServer(allowedOrigins: string[], nodeEnv: string, trustPro
     credentials: true,
   }));
 
-  app.use(express.json({ limit: '10mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+  // Baseline hardening headers without adding new dependencies.
+  app.disable('x-powered-by');
+  app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    if (nodeEnv === 'production') {
+      res.setHeader(
+        'Strict-Transport-Security',
+        'max-age=31536000; includeSubDomains; preload'
+      );
+      res.setHeader(
+        'Content-Security-Policy',
+        "default-src 'self'; frame-ancestors 'none'; object-src 'none'"
+      );
+    }
+    next();
+  });
+
+  // Enforce HTTPS in production behind proxy (Railway/Cloudflare etc.).
+  if (nodeEnv === 'production') {
+    app.use((req, res, next) => {
+      const proto = (req.headers['x-forwarded-proto'] || '').toString().split(',')[0].trim();
+      if (proto && proto !== 'https') {
+        return res.status(403).json({ success: false, error: 'HTTPS required.' });
+      }
+      next();
+    });
+  }
+
+  app.use(express.json({ limit: '35mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '35mb' }));
   app.use(apiLimiter as any);
 
   if (nodeEnv !== 'production') {

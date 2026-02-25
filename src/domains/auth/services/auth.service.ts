@@ -7,6 +7,7 @@ import { sendOtpEmail } from '../../../infra/email/emailService.js';
 export interface AuthSuccess {
     user: {
         id: string;
+        userId: string;
         email: string;
         userType: 'user' | 'creator' | 'admin';
     };
@@ -35,16 +36,37 @@ export class AuthService {
         return Math.floor(100000 + Math.random() * 900000).toString();
     }
 
-    private async issueAuthTokens(user: any): Promise<AuthSuccess> {
-        const { accessToken, refreshToken } = this.generateTokens(user._id.toString(), user.email, user.userType);
+    private ensureRoles(user: any): Array<'user' | 'creator' | 'admin'> {
+        const roleSet = new Set<string>(Array.isArray(user.roles) ? user.roles : []);
+        if (user.userType) roleSet.add(user.userType);
+        if (!roleSet.size) roleSet.add('user');
+        user.roles = Array.from(roleSet);
+        if (!user.userType || !roleSet.has(user.userType)) {
+            user.userType = user.roles[0];
+        }
+        return user.roles;
+    }
+
+    private async issueAuthTokens(
+        user: any,
+        loginRole?: 'user' | 'creator' | 'admin'
+    ): Promise<AuthSuccess> {
+        this.ensureRoles(user);
+        const selectedRole = loginRole || user.userType;
+        if (!user.roles.includes(selectedRole)) {
+            user.roles.push(selectedRole);
+        }
+        user.userType = selectedRole;
+        const { accessToken, refreshToken } = this.generateTokens(user._id.toString(), user.email, selectedRole);
         user.refreshToken = await bcrypt.hash(refreshToken, 10);
         await user.save();
 
         return {
             user: {
                 id: user._id.toString(),
+                userId: user._id.toString(),
                 email: user.email,
-                userType: user.userType,
+                userType: selectedRole,
             },
             accessToken,
             refreshToken,
@@ -70,26 +92,12 @@ export class AuthService {
      * Signup logic (Create user + tokens)
      */
     async signup(email: string, password: string): Promise<AuthSuccess> {
-        const user = new User({ email, password });
+        const user = new User({ email, password, userType: 'user', roles: ['user'] });
 
         // Duplicate email check happens at DB level (caught by controller)
         await user.save();
 
-        const { accessToken, refreshToken } = this.generateTokens(user._id.toString(), user.email, user.userType);
-
-        // Hash refresh token (security)
-        user.refreshToken = await bcrypt.hash(refreshToken, 10);
-        await user.save();
-
-        return {
-            user: {
-                id: user._id.toString(),
-                email: user.email,
-                userType: user.userType,
-            },
-            accessToken,
-            refreshToken,
-        };
+        return this.issueAuthTokens(user, 'user');
     }
 
     /**
@@ -106,20 +114,8 @@ export class AuthService {
             throw new Error('Invalid email or password.');
         }
 
-        const { accessToken, refreshToken } = this.generateTokens(user._id.toString(), user.email, user.userType);
-
-        user.refreshToken = await bcrypt.hash(refreshToken, 10);
-        await user.save();
-
-        return {
-            user: {
-                id: user._id.toString(),
-                email: user.email,
-                userType: user.userType,
-            },
-            accessToken,
-            refreshToken,
-        };
+        this.ensureRoles(user);
+        return this.issueAuthTokens(user, user.userType);
     }
 
     async startRoleLogin(role: 'user' | 'creator', email: string): Promise<{
@@ -132,9 +128,7 @@ export class AuthService {
 
         const existing = await User.findOne({ email: normalizedEmail });
         if (existing) {
-            if (existing.userType !== role) {
-                throw new Error(`Email already registered as ${existing.userType}. Use that portal.`);
-            }
+            this.ensureRoles(existing);
             return { accountExists: true, next: 'password' };
         }
 
@@ -162,9 +156,9 @@ export class AuthService {
 
     async loginWithRolePassword(role: 'user' | 'creator', email: string, password: string): Promise<AuthSuccess> {
         const normalizedEmail = this.normalizeEmail(email);
-        const user = await User.findOne({ email: normalizedEmail, userType: role });
+        const user = await User.findOne({ email: normalizedEmail });
         if (!user) {
-            throw new Error(`No ${role} account found for this email.`);
+            throw new Error('No account found for this email.');
         }
 
         const isMatch = await user.comparePassword(password);
@@ -172,7 +166,7 @@ export class AuthService {
             throw new Error('Invalid email or password.');
         }
 
-        return this.issueAuthTokens(user);
+        return this.issueAuthTokens(user, role);
     }
 
     async verifySignupOtpAndCreate(
@@ -205,17 +199,18 @@ export class AuthService {
             email: normalizedEmail,
             password,
             userType: role,
+            roles: [role],
         });
         await user.save();
 
-        return this.issueAuthTokens(user);
+        return this.issueAuthTokens(user, role);
     }
 
     async requestPasswordResetOtp(role: 'user' | 'creator', email: string): Promise<{ otpSent: boolean; ttlSeconds: number }> {
         const normalizedEmail = this.normalizeEmail(email);
-        const user = await User.findOne({ email: normalizedEmail, userType: role });
+        const user = await User.findOne({ email: normalizedEmail });
         if (!user) {
-            throw new Error(`No ${role} account found for this email.`);
+            throw new Error('No account found for this email.');
         }
 
         const otp = this.generateOtp();
@@ -243,9 +238,9 @@ export class AuthService {
         currentPassword?: string
     ): Promise<{ updated: boolean }> {
         const normalizedEmail = this.normalizeEmail(email);
-        const user = await User.findOne({ email: normalizedEmail, userType: role });
+        const user = await User.findOne({ email: normalizedEmail });
         if (!user) {
-            throw new Error(`No ${role} account found for this email.`);
+            throw new Error('No account found for this email.');
         }
 
         const redis = getRedisConnection();
@@ -297,13 +292,26 @@ export class AuthService {
         }
 
         // 4. Generate NEW pair
-        const { accessToken, refreshToken } = this.generateTokens(decoded.userId, decoded.email, decoded.userType);
+        this.ensureRoles(user);
+        const nextRole = user.roles.includes(decoded.userType as any)
+            ? decoded.userType
+            : user.userType;
+        const { accessToken, refreshToken } = this.generateTokens(decoded.userId, decoded.email, nextRole);
 
         // 5. Save new hashed refresh token (invalidates old one)
         user.refreshToken = await bcrypt.hash(refreshToken, 10);
+        user.userType = nextRole as 'user' | 'creator' | 'admin';
         await user.save();
 
-        return { accessToken, refreshToken };
+        return {
+            accessToken,
+            refreshToken,
+            user: {
+                userId: user._id.toString(),
+                email: user.email,
+                userType: nextRole as 'user' | 'creator' | 'admin',
+            },
+        };
     }
 
     /**

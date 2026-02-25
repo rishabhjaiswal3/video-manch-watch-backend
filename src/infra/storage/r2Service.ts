@@ -69,6 +69,26 @@ export const r2Service = {
   },
 
   /**
+   * Upload a file buffer directly to R2.
+   */
+  async uploadBuffer(
+    bucket: string,
+    key: string,
+    body: Buffer,
+    contentType: string
+  ): Promise<void> {
+    const client = getR2Client();
+    await client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: body,
+        ContentType: contentType,
+      })
+    );
+  },
+
+  /**
    * Check if a file exists in R2
    */
   async fileExists(bucket: string, key: string): Promise<boolean> {
