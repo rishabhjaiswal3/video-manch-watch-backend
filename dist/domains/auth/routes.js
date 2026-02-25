@@ -15,8 +15,8 @@ router.use(rateLimiter_js_1.authLimiter);
  */
 router.post('/signup', (0, validate_js_1.validate)(auth_js_1.signupSchema), (req, res) => authController.signup(req, res));
 router.post('/login', (0, validate_js_1.validate)(auth_js_1.loginSchema), (req, res) => authController.login(req, res));
-router.post('/login/user', (0, validate_js_1.validate)(auth_js_1.roleLoginFlowSchema), (req, res) => authController.loginUser(req, res));
-router.post('/login/creator', (0, validate_js_1.validate)(auth_js_1.roleLoginFlowSchema), (req, res) => authController.loginCreator(req, res));
+router.post('/login/user', (0, validate_js_1.validate)(auth_js_1.roleLoginFlowSchema), rateLimiter_js_1.otpVerifyLimiter, (req, res) => authController.loginUser(req, res));
+router.post('/login/creator', (0, validate_js_1.validate)(auth_js_1.roleLoginFlowSchema), rateLimiter_js_1.otpVerifyLimiter, (req, res) => authController.loginCreator(req, res));
 router.post('/password/user/request', (0, validate_js_1.validate)(auth_js_1.passwordResetRequestSchema), (req, res) => authController.requestUserPasswordReset(req, res));
 router.post('/password/creator/request', (0, validate_js_1.validate)(auth_js_1.passwordResetRequestSchema), (req, res) => authController.requestCreatorPasswordReset(req, res));
 router.post('/password/user/reset', (0, validate_js_1.validate)(auth_js_1.passwordResetConfirmSchema), (req, res) => authController.resetUserPassword(req, res));

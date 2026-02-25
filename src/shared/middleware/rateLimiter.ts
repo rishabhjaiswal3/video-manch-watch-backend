@@ -24,6 +24,26 @@ export const authLimiter = rateLimit({
   },
 });
 
+// OTP verification limiter (email + IP scoped)
+// Blocks brute force attempts: 3 failed OTP verification attempts in 10 minutes.
+export const otpVerifyLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  // Apply only when request includes an OTP field.
+  skip: (req) => !req.body?.otp,
+  keyGenerator: (req) => {
+    const email = typeof req.body?.email === 'string' ? req.body.email.toLowerCase().trim() : 'unknown';
+    return `${req.ip}:${email}`;
+  },
+  message: {
+    success: false,
+    error: 'Too many invalid OTP attempts. Try again after 10 minutes.',
+  },
+});
+
 // Upload rate limiter
 export const uploadLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour

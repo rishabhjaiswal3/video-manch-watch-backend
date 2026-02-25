@@ -9,7 +9,7 @@ import {
   passwordResetConfirmSchema,
   refreshTokenSchema,
 } from '../../shared/schemas/auth.js';
-import { authLimiter } from '../../shared/middleware/rateLimiter.js';
+import { authLimiter, otpVerifyLimiter } from '../../shared/middleware/rateLimiter.js';
 import { authenticate } from '../../shared/middleware/auth.js';
 
 const router = Router();
@@ -23,8 +23,8 @@ router.use(authLimiter as any);
  */
 router.post('/signup', validate(signupSchema), (req, res) => authController.signup(req, res));
 router.post('/login', validate(loginSchema), (req, res) => authController.login(req, res));
-router.post('/login/user', validate(roleLoginFlowSchema), (req, res) => authController.loginUser(req, res));
-router.post('/login/creator', validate(roleLoginFlowSchema), (req, res) => authController.loginCreator(req, res));
+router.post('/login/user', validate(roleLoginFlowSchema), otpVerifyLimiter as any, (req, res) => authController.loginUser(req, res));
+router.post('/login/creator', validate(roleLoginFlowSchema), otpVerifyLimiter as any, (req, res) => authController.loginCreator(req, res));
 router.post('/password/user/request', validate(passwordResetRequestSchema), (req, res) =>
   authController.requestUserPasswordReset(req, res)
 );

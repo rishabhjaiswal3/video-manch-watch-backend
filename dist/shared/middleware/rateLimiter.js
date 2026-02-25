@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.liveChatLimiter = exports.liveLimiter = exports.playbackLimiter = exports.uploadLimiter = exports.authLimiter = exports.apiLimiter = void 0;
+exports.liveChatLimiter = exports.liveLimiter = exports.playbackLimiter = exports.uploadLimiter = exports.otpVerifyLimiter = exports.authLimiter = exports.apiLimiter = void 0;
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 // General API rate limiter
 exports.apiLimiter = (0, express_rate_limit_1.default)({
@@ -25,6 +25,25 @@ exports.authLimiter = (0, express_rate_limit_1.default)({
     message: {
         success: false,
         error: 'Too many authentication attempts. Please try again later.',
+    },
+});
+// OTP verification limiter (email + IP scoped)
+// Blocks brute force attempts: 3 failed OTP verification attempts in 10 minutes.
+exports.otpVerifyLimiter = (0, express_rate_limit_1.default)({
+    windowMs: 10 * 60 * 1000, // 10 minutes
+    max: 3,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skipSuccessfulRequests: true,
+    // Apply only when request includes an OTP field.
+    skip: (req) => !req.body?.otp,
+    keyGenerator: (req) => {
+        const email = typeof req.body?.email === 'string' ? req.body.email.toLowerCase().trim() : 'unknown';
+        return `${req.ip}:${email}`;
+    },
+    message: {
+        success: false,
+        error: 'Too many invalid OTP attempts. Try again after 10 minutes.',
     },
 });
 // Upload rate limiter
