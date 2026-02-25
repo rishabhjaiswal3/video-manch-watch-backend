@@ -29,7 +29,10 @@ export const r2Service = {
     const expiresIn = PRESIGNED_URL_EXPIRY_SECONDS;
 
     console.log(`[R2] 🔑 Generating presigned upload URL`);
-    console.log(`[R2] 📂 Bucket: ${bucket}, Key: ${key}`);
+    console.log(`[R2] 📂 Bucket: ${bucket}`);
+    console.log(`[R2] 📁 Key: ${key}`);
+    console.log(`[R2] 🧾 Content-Type (signed): ${contentType}`);
+    console.log(`[R2] 🌐 Client endpoint:`, client.config.endpoint);
 
     const command = new PutObjectCommand({
       Bucket: bucket,

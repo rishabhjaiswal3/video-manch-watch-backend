@@ -167,8 +167,11 @@ export class ProfileService {
     );
 
     console.log(`[Profile] Avatar presigned URL generated`);
+    console.log(`[Profile] Bucket: ${R2_BUCKETS.USER_ASSETS}`);
     console.log(`[Profile] R2 key (storage path): ${uploadUrl.key}`);
-    console.log(`[Profile] Upload URL: ${uploadUrl.uploadUrl.split('?')[0]}`);
+    console.log(`[Profile] full URL: ${uploadUrl.uploadUrl}`);
+    console.log(`[Profile] expiresIn: ${uploadUrl.expiresIn}s`);
+    console.log(`[Profile] Upload URL (no query): ${uploadUrl.uploadUrl.split('?')[0]}`);
 
     return {
       uploadUrl: uploadUrl.uploadUrl,
