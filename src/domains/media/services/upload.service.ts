@@ -56,9 +56,10 @@ export class UploadService {
             description?: string;
             contentType?: string;
             videoId?: string;
+            tags?: string[];
         }
     ) {
-        const { filename, fileSize, mimeType, title, description, contentType, videoId: providedVideoId } = data;
+        const { filename, fileSize, mimeType, title, description, contentType, videoId: providedVideoId, tags } = data;
 
         // Validation
         const validContentTypes = ['vod', 'reel', 'live'];
@@ -83,15 +84,18 @@ export class UploadService {
         let videoId = providedVideoId;
 
         if (videoId) {
-            // Reuse logic
+            // Idempotent behavior:
+            // - if the record exists, treat as retry/reinit.
+            // - if not, allow creating a new record with the provided videoId.
             video = await Video.findOne({ videoId });
-            if (!video) throw new Error('Video not found');
-            if (video.userId !== userId) throw new Error('Unauthorized');
-            if (!RETRYABLE_STATUSES.includes(video.status)) {
-                throw new Error(`Cannot retry video with status '${video.status}'`);
-            }
-            if ((video.retryCount || 0) >= MAX_UPLOAD_RETRIES) {
-                throw new Error(`Max upload retries (${MAX_UPLOAD_RETRIES}) reached`);
+            if (video) {
+                if (video.userId !== userId) throw new Error('Unauthorized');
+                if (!RETRYABLE_STATUSES.includes(video.status)) {
+                    throw new Error(`Cannot retry video with status '${video.status}'`);
+                }
+                if ((video.retryCount || 0) >= MAX_UPLOAD_RETRIES) {
+                    throw new Error(`Max upload retries (${MAX_UPLOAD_RETRIES}) reached`);
+                }
             }
         } else {
             videoId = uuidv4();
@@ -116,6 +120,7 @@ export class UploadService {
                 userType,
                 title,
                 description,
+                tags: tags || [],
                 contentType: finalContentType,
                 originalFile: {
                     filename,
@@ -134,6 +139,7 @@ export class UploadService {
             this.setStatusWithHistory(video, 'pending', 'upload-reinit');
             video.title = title;
             if (description) video.description = description;
+            if (tags !== undefined) video.tags = tags;
             video.contentType = finalContentType;
             video.originalFile = { filename, size: fileSize, mimeType, r2Key: presignedData.key };
             video.transcoding = { progress: 0 };
@@ -255,12 +261,18 @@ export class UploadService {
                 videoId: v.videoId,
                 title: v.title,
                 description: v.description,
+                tags: v.tags,
                 status: v.status,
                 thumbnail: v.thumbnail,
                 duration: v.duration,
                 outputs: v.outputs,
                 masterPlaylistUrl: v.masterPlaylistUrl,
                 contentType: v.contentType || 'vod',
+                isDownloadable: v.isDownloadable ?? false,
+                isAdultContent: v.isAdultContent ?? false,
+                allowLikes: (v as any).allowLikes ?? true,
+                allowDislikes: (v as any).allowDislikes ?? true,
+                allowComments: (v as any).allowComments ?? true,
                 transcoding: { progress: v.transcoding?.progress || 0, error: v.transcoding?.error },
                 createdAt: v.createdAt,
                 updatedAt: v.updatedAt,
@@ -368,22 +380,75 @@ export class UploadService {
     }
 
     /**
+     * Get thumbnail presigned upload URL
+     */
+    async getThumbnailUploadUrl(userId: string, videoId: string, mimeType: string) {
+        const video = await Video.findOne({ videoId });
+        if (!video) throw new Error('Video not found');
+        if (video.userId !== userId) throw new Error('Unauthorized');
+        if (video.status === 'deleted') throw new Error('Video is deleted');
+
+        const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+        if (!ALLOWED_IMAGE_TYPES.includes(mimeType)) {
+            throw new Error('Invalid image type. Allowed: JPEG, PNG, WebP');
+        }
+
+        const result = await r2Service.getThumbnailUploadPresignedUrl(userId, videoId, mimeType);
+        return {
+            uploadUrl: result.uploadUrl,
+            thumbnailKey: result.key,
+            expiresIn: result.expiresIn,
+        };
+    }
+
+    /**
      * Update Video
      */
-    async updateVideo(userId: string, videoId: string, updates: { title?: string; description?: string }) {
+    async updateVideo(
+        userId: string,
+        videoId: string,
+        updates: {
+            title?: string;
+            description?: string;
+            tags?: string[];
+            contentType?: 'vod' | 'reel' | 'live';
+            thumbnail?: string;
+            isDownloadable?: boolean;
+            isAdultContent?: boolean;
+            allowLikes?: boolean;
+            allowDislikes?: boolean;
+            allowComments?: boolean;
+        }
+    ) {
         const video = await Video.findOne({ videoId });
         if (!video) throw new Error('Video not found');
         if (video.userId !== userId) throw new Error('Unauthorized');
         if (video.status === 'deleted') throw new Error('Video is deleted');
 
         if (updates.title) video.title = updates.title.trim();
-        if (updates.description) video.description = updates.description.trim();
+        if (updates.description !== undefined) video.description = updates.description.trim();
+        if (updates.tags !== undefined) video.tags = updates.tags;
+        if (updates.contentType !== undefined) video.contentType = updates.contentType;
+        if (updates.thumbnail !== undefined) video.thumbnail = updates.thumbnail;
+        if (updates.isDownloadable !== undefined) video.isDownloadable = updates.isDownloadable;
+        if (updates.isAdultContent !== undefined) video.isAdultContent = updates.isAdultContent;
+        if (updates.allowLikes !== undefined) (video as any).allowLikes = updates.allowLikes;
+        if (updates.allowDislikes !== undefined) (video as any).allowDislikes = updates.allowDislikes;
+        if (updates.allowComments !== undefined) (video as any).allowComments = updates.allowComments;
 
         await video.save();
         return {
             videoId: video.videoId,
             title: video.title,
             description: video.description,
+            tags: video.tags,
+            contentType: video.contentType,
+            thumbnail: video.thumbnail,
+            isDownloadable: video.isDownloadable,
+            isAdultContent: video.isAdultContent,
+            allowLikes: (video as any).allowLikes,
+            allowDislikes: (video as any).allowDislikes,
+            allowComments: (video as any).allowComments,
             status: video.status,
             updatedAt: video.updatedAt,
         };

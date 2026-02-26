@@ -60,17 +60,19 @@ class UploadService {
         let video = null;
         let videoId = providedVideoId;
         if (videoId) {
-            // Reuse logic
+            // Idempotent behavior:
+            // - if the record exists, treat as retry/reinit.
+            // - if not, allow creating a new record with the provided videoId.
             video = await Video_js_1.Video.findOne({ videoId });
-            if (!video)
-                throw new Error('Video not found');
-            if (video.userId !== userId)
-                throw new Error('Unauthorized');
-            if (!RETRYABLE_STATUSES.includes(video.status)) {
-                throw new Error(`Cannot retry video with status '${video.status}'`);
-            }
-            if ((video.retryCount || 0) >= MAX_UPLOAD_RETRIES) {
-                throw new Error(`Max upload retries (${MAX_UPLOAD_RETRIES}) reached`);
+            if (video) {
+                if (video.userId !== userId)
+                    throw new Error('Unauthorized');
+                if (!RETRYABLE_STATUSES.includes(video.status)) {
+                    throw new Error(`Cannot retry video with status '${video.status}'`);
+                }
+                if ((video.retryCount || 0) >= MAX_UPLOAD_RETRIES) {
+                    throw new Error(`Max upload retries (${MAX_UPLOAD_RETRIES}) reached`);
+                }
             }
         }
         else {

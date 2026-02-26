@@ -11,7 +11,15 @@ const connectDatabase = async () => {
         throw new Error('MONGODB_URI is not defined in environment variables');
     }
     try {
-        await mongoose_1.default.connect(mongoUri);
+        await mongoose_1.default.connect(mongoUri, {
+            maxPoolSize: 20,
+            minPoolSize: 2,
+            serverSelectionTimeoutMS: 10000,
+            socketTimeoutMS: 45000,
+            connectTimeoutMS: 10000,
+            heartbeatFrequencyMS: 10000,
+            retryWrites: true,
+        });
         console.log('Connected to MongoDB');
     }
     catch (error) {
@@ -36,5 +44,8 @@ mongoose_1.default.connection.on('disconnected', () => {
 });
 mongoose_1.default.connection.on('error', (err) => {
     console.error('MongoDB error:', err);
+});
+mongoose_1.default.connection.on('reconnected', () => {
+    console.log('MongoDB reconnected');
 });
 //# sourceMappingURL=database.js.map

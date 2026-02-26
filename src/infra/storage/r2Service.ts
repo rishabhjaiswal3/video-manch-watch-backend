@@ -140,6 +140,29 @@ export const r2Service = {
   },
 
   /**
+   * Generate a presigned URL for uploading a thumbnail image directly to R2
+   */
+  async getThumbnailUploadPresignedUrl(
+    userId: string,
+    videoId: string,
+    mimeType: string
+  ): Promise<PresignedUrlResponse> {
+    const client = getR2Client();
+    const ext = mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';
+    const key = `thumbnails/${userId}/${videoId}/custom.${ext}`;
+    const expiresIn = 600; // 10 minutes
+
+    const command = new PutObjectCommand({
+      Bucket: R2_BUCKETS.THUMBNAILS,
+      Key: key,
+      ContentType: mimeType,
+    });
+
+    const uploadUrl = await getSignedUrl(client, command, { expiresIn });
+    return { uploadUrl, key, expiresIn };
+  },
+
+  /**
    * Get public URL for a transcoded video
    */
   getPublicUrl(key: string): string {

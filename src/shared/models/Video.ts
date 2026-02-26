@@ -98,6 +98,11 @@ export interface IVideo extends Document {
   isDownloadable?: boolean;
   showTitle?: boolean;
 
+  // Engagement controls (creator can toggle on/off)
+  allowLikes?: boolean;
+  allowDislikes?: boolean;
+  allowComments?: boolean;
+
   // Engagement counters (denormalized for performance)
   likeCount?: number;
   dislikeCount?: number;
@@ -243,6 +248,11 @@ const VideoSchema = new Schema<IVideo>(
     isAdultContent: { type: Boolean, default: false },
     isDownloadable: { type: Boolean, default: false },
     showTitle: { type: Boolean, default: true },
+
+    // Engagement controls
+    allowLikes: { type: Boolean, default: true },
+    allowDislikes: { type: Boolean, default: true },
+    allowComments: { type: Boolean, default: true },
 
     // Engagement counters
     likeCount: { type: Number, default: 0, min: 0 },

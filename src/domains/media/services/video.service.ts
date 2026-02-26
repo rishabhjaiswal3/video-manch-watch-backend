@@ -1,4 +1,5 @@
 import { Video } from '../../../shared/models/Video.js';
+import { Profile } from '../../../shared/models/Profile.js';
 import { generateSignedUrl } from '../../../shared/utils/signedUrl.js';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -17,6 +18,30 @@ interface RegisterVODInput {
 }
 
 export class VideoService {
+    private async getProfileMap(userIds: string[]): Promise<Map<string, any>> {
+        const uniqueUserIds = Array.from(new Set(userIds.filter(Boolean)));
+        if (uniqueUserIds.length === 0) return new Map();
+
+        const profiles = await Profile.find({ userId: { $in: uniqueUserIds } })
+            .select('userId username displayName avatar isVerified')
+            .lean();
+
+        return new Map(profiles.map((profile: any) => [profile.userId, profile]));
+    }
+
+    private enrichVideoWithChannel(video: any, profileMap: Map<string, any>) {
+        const profile = profileMap.get(video.userId);
+        const channelName = profile?.displayName || profile?.username || 'Unknown user';
+
+        return {
+            ...video,
+            channel: channelName,
+            channelAvatar: profile?.avatar || '',
+            channelUsername: profile?.username || '',
+            channelVerified: Boolean(profile?.isVerified),
+        };
+    }
+
     /**
      * Register a VOD entry created from live recording.
      */
@@ -78,7 +103,9 @@ export class VideoService {
             Video.countDocuments(query),
         ]);
 
-        // Sign URLs for playback
+        const profileMap = await this.getProfileMap(videos.map((v: any) => v.userId));
+
+        // Sign URLs for playback + attach channel info
         const signedVideos = videos.map(v => {
             const videoObj = { ...v } as any;
             if (v.masterPlaylistUrl) {
@@ -90,7 +117,7 @@ export class VideoService {
                 });
                 videoObj.hlsUrl = signedPath;
             }
-            return videoObj;
+            return this.enrichVideoWithChannel(videoObj, profileMap);
         });
 
         return {
@@ -114,6 +141,7 @@ export class VideoService {
         if (!video || video.status !== 'completed') return null;
 
         const videoObj = { ...video } as any;
+        const profileMap = await this.getProfileMap([video.userId]);
 
         if (video.masterPlaylistUrl) {
             const { signedPath } = generateSignedUrl({
@@ -123,7 +151,7 @@ export class VideoService {
             videoObj.hlsUrl = signedPath;
         }
 
-        return videoObj;
+        return this.enrichVideoWithChannel(videoObj, profileMap);
     }
 
     /**
@@ -146,6 +174,8 @@ export class VideoService {
             Video.countDocuments(query),
         ]);
 
+        const profileMap = await this.getProfileMap(videos.map((v: any) => v.userId));
+
         const signedVideos = videos.map(v => {
             const videoObj = { ...v } as any;
             if (v.masterPlaylistUrl) {
@@ -155,7 +185,12 @@ export class VideoService {
                 });
                 videoObj.hlsUrl = signedPath;
             }
-            return videoObj;
+            const enriched = this.enrichVideoWithChannel(videoObj, profileMap);
+            return {
+                ...enriched,
+                username: enriched.channel,
+                avatar: enriched.channelAvatar,
+            };
         });
 
         return {
