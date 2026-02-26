@@ -403,6 +403,10 @@ export class UploadService {
 
     /**
      * Update Video
+     *
+     * Uses findOneAndUpdate with $set to avoid full-document re-validation,
+     * which would fail on the outputs[] sub-schema (r2Key required) even though
+     * we are not touching the outputs array at all.
      */
     async updateVideo(
         userId: string,
@@ -420,37 +424,48 @@ export class UploadService {
             allowComments?: boolean;
         }
     ) {
-        const video = await Video.findOne({ videoId });
-        if (!video) throw new Error('Video not found');
-        if (video.userId !== userId) throw new Error('Unauthorized');
-        if (video.status === 'deleted') throw new Error('Video is deleted');
+        // Auth + existence check first (lean, no save needed)
+        const existing = await Video.findOne({ videoId }).lean();
+        if (!existing) throw new Error('Video not found');
+        if (existing.userId !== userId) throw new Error('Unauthorized');
+        if (existing.status === 'deleted') throw new Error('Video is deleted');
 
-        if (updates.title) video.title = updates.title.trim();
-        if (updates.description !== undefined) video.description = updates.description.trim();
-        if (updates.tags !== undefined) video.tags = updates.tags;
-        if (updates.contentType !== undefined) video.contentType = updates.contentType;
-        if (updates.thumbnail !== undefined) video.thumbnail = updates.thumbnail;
-        if (updates.isDownloadable !== undefined) video.isDownloadable = updates.isDownloadable;
-        if (updates.isAdultContent !== undefined) video.isAdultContent = updates.isAdultContent;
-        if (updates.allowLikes !== undefined) (video as any).allowLikes = updates.allowLikes;
-        if (updates.allowDislikes !== undefined) (video as any).allowDislikes = updates.allowDislikes;
-        if (updates.allowComments !== undefined) (video as any).allowComments = updates.allowComments;
+        // Build only the fields the caller wants to change
+        const $set: Record<string, unknown> = {};
+        if (updates.title !== undefined) $set.title = updates.title.trim();
+        if (updates.description !== undefined) $set.description = updates.description.trim();
+        if (updates.tags !== undefined) $set.tags = updates.tags;
+        if (updates.contentType !== undefined) $set.contentType = updates.contentType;
+        if (updates.thumbnail !== undefined) $set.thumbnail = updates.thumbnail;
+        if (updates.isDownloadable !== undefined) $set.isDownloadable = updates.isDownloadable;
+        if (updates.isAdultContent !== undefined) $set.isAdultContent = updates.isAdultContent;
+        if (updates.allowLikes !== undefined) $set.allowLikes = updates.allowLikes;
+        if (updates.allowDislikes !== undefined) $set.allowDislikes = updates.allowDislikes;
+        if (updates.allowComments !== undefined) $set.allowComments = updates.allowComments;
 
-        await video.save();
+        // findOneAndUpdate only validates the fields being set, not the whole doc
+        const updated = await Video.findOneAndUpdate(
+            { videoId, userId },
+            { $set },
+            { new: true, runValidators: true, context: 'query' }
+        );
+
+        if (!updated) throw new Error('Update failed');
+
         return {
-            videoId: video.videoId,
-            title: video.title,
-            description: video.description,
-            tags: video.tags,
-            contentType: video.contentType,
-            thumbnail: video.thumbnail,
-            isDownloadable: video.isDownloadable,
-            isAdultContent: video.isAdultContent,
-            allowLikes: (video as any).allowLikes,
-            allowDislikes: (video as any).allowDislikes,
-            allowComments: (video as any).allowComments,
-            status: video.status,
-            updatedAt: video.updatedAt,
+            videoId: updated.videoId,
+            title: updated.title,
+            description: updated.description,
+            tags: updated.tags,
+            contentType: updated.contentType,
+            thumbnail: updated.thumbnail,
+            isDownloadable: updated.isDownloadable,
+            isAdultContent: updated.isAdultContent,
+            allowLikes: (updated as any).allowLikes,
+            allowDislikes: (updated as any).allowDislikes,
+            allowComments: (updated as any).allowComments,
+            status: updated.status,
+            updatedAt: updated.updatedAt,
         };
     }
 
