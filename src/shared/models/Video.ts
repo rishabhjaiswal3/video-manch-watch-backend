@@ -125,7 +125,7 @@ export interface IVideo extends Document {
 
 const VideoOutputSchema = new Schema<IVideoOutput>({
   quality: { type: String, required: true },
-  r2Key: { type: String, required: true },
+  r2Key: { type: String },   // Optional — HLS outputs use playlistUrl instead
   url: { type: String },
   size: { type: Number },
   playlistUrl: { type: String },

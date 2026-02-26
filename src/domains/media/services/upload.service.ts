@@ -443,11 +443,13 @@ export class UploadService {
         if (updates.allowDislikes !== undefined) $set.allowDislikes = updates.allowDislikes;
         if (updates.allowComments !== undefined) $set.allowComments = updates.allowComments;
 
-        // findOneAndUpdate only validates the fields being set, not the whole doc
+        // findOneAndUpdate with runValidators: false avoids re-validating
+        // the entire document (e.g. the outputs[] sub-schema) when we are
+        // only patching metadata fields.
         const updated = await Video.findOneAndUpdate(
             { videoId, userId },
             { $set },
-            { new: true, runValidators: true, context: 'query' }
+            { new: true, runValidators: false }
         );
 
         if (!updated) throw new Error('Update failed');
