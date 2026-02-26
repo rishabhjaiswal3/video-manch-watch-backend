@@ -273,6 +273,7 @@ export class UploadService {
                 allowLikes: (v as any).allowLikes ?? true,
                 allowDislikes: (v as any).allowDislikes ?? true,
                 allowComments: (v as any).allowComments ?? true,
+                visibility: (v as any).visibility ?? 'unlisted',
                 transcoding: { progress: v.transcoding?.progress || 0, error: v.transcoding?.error },
                 createdAt: v.createdAt,
                 updatedAt: v.updatedAt,
@@ -422,6 +423,7 @@ export class UploadService {
             allowLikes?: boolean;
             allowDislikes?: boolean;
             allowComments?: boolean;
+            visibility?: 'listed' | 'unlisted';
         }
     ) {
         // Auth + existence check first (lean, no save needed)
@@ -442,6 +444,7 @@ export class UploadService {
         if (updates.allowLikes !== undefined) $set.allowLikes = updates.allowLikes;
         if (updates.allowDislikes !== undefined) $set.allowDislikes = updates.allowDislikes;
         if (updates.allowComments !== undefined) $set.allowComments = updates.allowComments;
+        if (updates.visibility !== undefined) $set.visibility = updates.visibility;
 
         // findOneAndUpdate with runValidators: false avoids re-validating
         // the entire document (e.g. the outputs[] sub-schema) when we are
@@ -466,6 +469,7 @@ export class UploadService {
             allowLikes: (updated as any).allowLikes,
             allowDislikes: (updated as any).allowDislikes,
             allowComments: (updated as any).allowComments,
+            visibility: (updated as any).visibility ?? 'unlisted',
             status: updated.status,
             updatedAt: updated.updatedAt,
         };

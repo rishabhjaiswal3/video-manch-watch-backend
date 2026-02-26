@@ -60,6 +60,7 @@ export const updateVideoSchema = z.object({
   allowLikes: z.boolean().optional(),
   allowDislikes: z.boolean().optional(),
   allowComments: z.boolean().optional(),
+  visibility: z.enum(['listed', 'unlisted']).optional(),
 });
 
 export const thumbnailUrlSchema = z.object({

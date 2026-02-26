@@ -12,6 +12,8 @@ import engagementRoutes from '../domains/social/engagement.routes.js';
 import subscriptionRoutes from '../domains/social/subscription.routes.js';
 import commentRoutes from '../domains/social/comment.routes.js';
 import watchLaterRoutes from '../domains/social/watchLater.routes.js';
+import playlistRoutes from '../domains/social/playlist.routes.js';
+import categoryRoutes from '../domains/admin/category.routes.js';
 
 export function registerRoutes(app: Express): void {
   app.use('/auth', authRoutes);
@@ -26,4 +28,6 @@ export function registerRoutes(app: Express): void {
   app.use('/subscriptions', subscriptionRoutes);
   app.use('/comments', commentRoutes);
   app.use('/watch-later', watchLaterRoutes);
+  app.use('/playlists', playlistRoutes);
+  app.use('/categories', categoryRoutes);
 }

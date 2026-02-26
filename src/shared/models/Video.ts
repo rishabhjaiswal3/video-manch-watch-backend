@@ -98,6 +98,9 @@ export interface IVideo extends Document {
   isDownloadable?: boolean;
   showTitle?: boolean;
 
+  // Visibility (creator can make listed or keep unlisted)
+  visibility?: 'listed' | 'unlisted';
+
   // Engagement controls (creator can toggle on/off)
   allowLikes?: boolean;
   allowDislikes?: boolean;
@@ -249,6 +252,14 @@ const VideoSchema = new Schema<IVideo>(
     isDownloadable: { type: Boolean, default: false },
     showTitle: { type: Boolean, default: true },
 
+    // Visibility
+    visibility: {
+      type: String,
+      enum: ['listed', 'unlisted'],
+      default: 'unlisted',
+      index: true,
+    },
+
     // Engagement controls
     allowLikes: { type: Boolean, default: true },
     allowDislikes: { type: Boolean, default: true },
@@ -280,5 +291,6 @@ VideoSchema.index({ contentType: 1 });
 VideoSchema.index({ tags: 1 });
 VideoSchema.index({ genres: 1 });
 VideoSchema.index({ createdAt: -1 });
+VideoSchema.index({ userId: 1, visibility: 1 });
 
 export const Video = mongoose.model<IVideo>('Video', VideoSchema);

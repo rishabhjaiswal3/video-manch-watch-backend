@@ -168,12 +168,12 @@ export class UploadController {
             const { userId } = ensureAuthenticatedUser(req);
             const {
                 title, description, tags, contentType, thumbnail,
-                isDownloadable, isAdultContent, allowLikes, allowDislikes, allowComments,
+                isDownloadable, isAdultContent, allowLikes, allowDislikes, allowComments, visibility,
             } = req.body;
 
             const result = await uploadService.updateVideo(userId, videoId, {
                 title, description, tags, contentType, thumbnail,
-                isDownloadable, isAdultContent, allowLikes, allowDislikes, allowComments,
+                isDownloadable, isAdultContent, allowLikes, allowDislikes, allowComments, visibility,
             });
 
             return res.status(200).json({ success: true, data: result });
