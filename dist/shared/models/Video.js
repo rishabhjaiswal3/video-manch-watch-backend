@@ -37,7 +37,7 @@ exports.Video = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
 const VideoOutputSchema = new mongoose_1.Schema({
     quality: { type: String, required: true },
-    r2Key: { type: String, required: true },
+    r2Key: { type: String }, // Optional — HLS outputs use playlistUrl instead
     url: { type: String },
     size: { type: Number },
     playlistUrl: { type: String },
@@ -150,6 +150,17 @@ const VideoSchema = new mongoose_1.Schema({
     isAdultContent: { type: Boolean, default: false },
     isDownloadable: { type: Boolean, default: false },
     showTitle: { type: Boolean, default: true },
+    // Visibility
+    visibility: {
+        type: String,
+        enum: ['listed', 'unlisted'],
+        default: 'unlisted',
+        index: true,
+    },
+    // Engagement controls
+    allowLikes: { type: Boolean, default: true },
+    allowDislikes: { type: Boolean, default: true },
+    allowComments: { type: Boolean, default: true },
     // Engagement counters
     likeCount: { type: Number, default: 0, min: 0 },
     dislikeCount: { type: Number, default: 0, min: 0 },
@@ -170,5 +181,6 @@ VideoSchema.index({ contentType: 1 });
 VideoSchema.index({ tags: 1 });
 VideoSchema.index({ genres: 1 });
 VideoSchema.index({ createdAt: -1 });
+VideoSchema.index({ userId: 1, visibility: 1 });
 exports.Video = mongoose_1.default.model('Video', VideoSchema);
 //# sourceMappingURL=Video.js.map

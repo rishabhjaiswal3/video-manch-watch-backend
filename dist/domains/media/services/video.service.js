@@ -2,9 +2,30 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.VideoService = void 0;
 const Video_js_1 = require("../../../shared/models/Video.js");
+const Profile_js_1 = require("../../../shared/models/Profile.js");
 const signedUrl_js_1 = require("../../../shared/utils/signedUrl.js");
 const uuid_1 = require("uuid");
 class VideoService {
+    async getProfileMap(userIds) {
+        const uniqueUserIds = Array.from(new Set(userIds.filter(Boolean)));
+        if (uniqueUserIds.length === 0)
+            return new Map();
+        const profiles = await Profile_js_1.Profile.find({ userId: { $in: uniqueUserIds } })
+            .select('userId username displayName avatar isVerified')
+            .lean();
+        return new Map(profiles.map((profile) => [profile.userId, profile]));
+    }
+    enrichVideoWithChannel(video, profileMap) {
+        const profile = profileMap.get(video.userId);
+        const channelName = profile?.displayName || profile?.username || 'Unknown user';
+        return {
+            ...video,
+            channel: channelName,
+            channelAvatar: profile?.avatar || '',
+            channelUsername: profile?.username || '',
+            channelVerified: Boolean(profile?.isVerified),
+        };
+    }
     /**
      * Register a VOD entry created from live recording.
      */
@@ -59,7 +80,8 @@ class VideoService {
                 .lean(),
             Video_js_1.Video.countDocuments(query),
         ]);
-        // Sign URLs for playback
+        const profileMap = await this.getProfileMap(videos.map((v) => v.userId));
+        // Sign URLs for playback + attach channel info
         const signedVideos = videos.map(v => {
             const videoObj = { ...v };
             if (v.masterPlaylistUrl) {
@@ -71,7 +93,7 @@ class VideoService {
                 });
                 videoObj.hlsUrl = signedPath;
             }
-            return videoObj;
+            return this.enrichVideoWithChannel(videoObj, profileMap);
         });
         return {
             videos: signedVideos,
@@ -92,6 +114,7 @@ class VideoService {
         if (!video || video.status !== 'completed')
             return null;
         const videoObj = { ...video };
+        const profileMap = await this.getProfileMap([video.userId]);
         if (video.masterPlaylistUrl) {
             const { signedPath } = (0, signedUrl_js_1.generateSignedUrl)({
                 videoId: video.videoId,
@@ -99,7 +122,7 @@ class VideoService {
             });
             videoObj.hlsUrl = signedPath;
         }
-        return videoObj;
+        return this.enrichVideoWithChannel(videoObj, profileMap);
     }
     /**
      * List Reels (vertical short videos)
@@ -118,6 +141,7 @@ class VideoService {
                 .lean(),
             Video_js_1.Video.countDocuments(query),
         ]);
+        const profileMap = await this.getProfileMap(videos.map((v) => v.userId));
         const signedVideos = videos.map(v => {
             const videoObj = { ...v };
             if (v.masterPlaylistUrl) {
@@ -127,7 +151,12 @@ class VideoService {
                 });
                 videoObj.hlsUrl = signedPath;
             }
-            return videoObj;
+            const enriched = this.enrichVideoWithChannel(videoObj, profileMap);
+            return {
+                ...enriched,
+                username: enriched.channel,
+                avatar: enriched.channelAvatar,
+            };
         });
         return {
             videos: signedVideos,

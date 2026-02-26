@@ -14,6 +14,7 @@ export declare class UploadService {
         description?: string;
         contentType?: string;
         videoId?: string;
+        tags?: string[];
     }): Promise<{
         videoId: string;
         uploadUrl: string;
@@ -69,12 +70,19 @@ export declare class UploadService {
             videoId: string;
             title: string;
             description: string | undefined;
+            tags: string[] | undefined;
             status: "pending" | "uploading" | "queued" | "processing" | "completed" | "failed" | "deleted";
             thumbnail: string | undefined;
             duration: number | undefined;
             outputs: import("mongoose").FlattenMaps<import("../../../shared/models/Video.js").IVideoOutput>[];
             masterPlaylistUrl: string | undefined;
             contentType: "vod" | "live" | "reel";
+            isDownloadable: boolean;
+            isAdultContent: boolean;
+            allowLikes: any;
+            allowDislikes: any;
+            allowComments: any;
+            visibility: any;
             transcoding: {
                 progress: number;
                 error: string | undefined;
@@ -116,16 +124,46 @@ export declare class UploadService {
         mimeType: string;
     }>;
     /**
+     * Get thumbnail presigned upload URL
+     */
+    getThumbnailUploadUrl(userId: string, videoId: string, mimeType: string): Promise<{
+        uploadUrl: string;
+        thumbnailKey: string;
+        expiresIn: number;
+    }>;
+    /**
      * Update Video
+     *
+     * Uses findOneAndUpdate with $set to avoid full-document re-validation,
+     * which would fail on the outputs[] sub-schema (r2Key required) even though
+     * we are not touching the outputs array at all.
      */
     updateVideo(userId: string, videoId: string, updates: {
         title?: string;
         description?: string;
+        tags?: string[];
+        contentType?: 'vod' | 'reel' | 'live';
+        thumbnail?: string;
+        isDownloadable?: boolean;
+        isAdultContent?: boolean;
+        allowLikes?: boolean;
+        allowDislikes?: boolean;
+        allowComments?: boolean;
+        visibility?: 'listed' | 'unlisted';
     }): Promise<{
         videoId: string;
         title: string;
         description: string | undefined;
-        status: "pending" | "uploading" | "queued" | "processing" | "completed" | "failed";
+        tags: string[] | undefined;
+        contentType: "vod" | "live" | "reel" | undefined;
+        thumbnail: string | undefined;
+        isDownloadable: boolean | undefined;
+        isAdultContent: boolean | undefined;
+        allowLikes: any;
+        allowDislikes: any;
+        allowComments: any;
+        visibility: any;
+        status: "pending" | "uploading" | "queued" | "processing" | "completed" | "failed" | "deleted";
         updatedAt: Date;
     }>;
     /**

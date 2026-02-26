@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { Category } from '../../../shared/models/Category.js';
+import { r2Service } from '../../../infra/storage/r2Service.js';
 
 function toSlug(name: string): string {
   return name
@@ -35,6 +36,7 @@ export class CategoryService {
       slug: c.slug,
       isActive: c.isActive,
       order: c.order,
+      thumbnailUrl: c.thumbnailUrl ?? null,
       createdAt: c.createdAt,
       updatedAt: c.updatedAt,
     }));
@@ -102,5 +104,38 @@ export class CategoryService {
     const result = await Category.findOneAndDelete({ categoryId }).lean();
     if (!result) throw new Error('Category not found');
     return { categoryId, deleted: true };
+  }
+
+  /**
+   * Admin: get presigned URL to upload category thumbnail
+   */
+  async getThumbnailUploadUrl(categoryId: string, mimeType: string) {
+    const cat = await Category.findOne({ categoryId }).lean();
+    if (!cat) throw new Error('Category not found');
+    const { uploadUrl, key, expiresIn } = await r2Service.getCategoryThumbnailPresignedUrl(categoryId, mimeType);
+    const publicUrl = r2Service.getPublicUrl(key);
+    return { uploadUrl, key, publicUrl, expiresIn };
+  }
+
+  /**
+   * Admin: save thumbnail URL after upload completes
+   */
+  async saveThumbnailUrl(categoryId: string, thumbnailUrl: string) {
+    const updated = await Category.findOneAndUpdate(
+      { categoryId },
+      { $set: { thumbnailUrl } },
+      { new: true }
+    ).lean();
+    if (!updated) throw new Error('Category not found');
+    return {
+      categoryId: updated.categoryId,
+      name: updated.name,
+      slug: updated.slug,
+      isActive: updated.isActive,
+      order: updated.order,
+      thumbnailUrl: updated.thumbnailUrl ?? null,
+      createdAt: updated.createdAt,
+      updatedAt: updated.updatedAt,
+    };
   }
 }

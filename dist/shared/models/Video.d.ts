@@ -71,6 +71,10 @@ export interface IVideo extends Document {
     isAdultContent?: boolean;
     isDownloadable?: boolean;
     showTitle?: boolean;
+    visibility?: 'listed' | 'unlisted';
+    allowLikes?: boolean;
+    allowDislikes?: boolean;
+    allowComments?: boolean;
     likeCount?: number;
     dislikeCount?: number;
     commentCount?: number;

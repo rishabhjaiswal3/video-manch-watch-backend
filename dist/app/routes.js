@@ -16,6 +16,9 @@ const engagement_routes_js_1 = __importDefault(require("../domains/social/engage
 const subscription_routes_js_1 = __importDefault(require("../domains/social/subscription.routes.js"));
 const comment_routes_js_1 = __importDefault(require("../domains/social/comment.routes.js"));
 const watchLater_routes_js_1 = __importDefault(require("../domains/social/watchLater.routes.js"));
+const playlist_routes_js_1 = __importDefault(require("../domains/social/playlist.routes.js"));
+const public_playlist_routes_js_1 = __importDefault(require("../domains/social/public-playlist.routes.js"));
+const category_routes_js_1 = __importDefault(require("../domains/admin/category.routes.js"));
 function registerRoutes(app) {
     app.use('/auth', routes_js_1.default);
     app.use('/upload', upload_routes_js_1.default);
@@ -29,5 +32,8 @@ function registerRoutes(app) {
     app.use('/subscriptions', subscription_routes_js_1.default);
     app.use('/comments', comment_routes_js_1.default);
     app.use('/watch-later', watchLater_routes_js_1.default);
+    app.use('/playlists', playlist_routes_js_1.default);
+    app.use('/public/playlists', public_playlist_routes_js_1.default);
+    app.use('/categories', category_routes_js_1.default);
 }
 //# sourceMappingURL=routes.js.map

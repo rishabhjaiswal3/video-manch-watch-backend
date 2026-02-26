@@ -97,6 +97,54 @@ exports.r2Service = {
         }
     },
     /**
+     * Generate a presigned URL for uploading a thumbnail image directly to R2
+     */
+    async getThumbnailUploadPresignedUrl(userId, videoId, mimeType) {
+        const client = (0, r2_js_1.getR2Client)();
+        const ext = mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';
+        const key = `thumbnails/${userId}/${videoId}/custom.${ext}`;
+        const expiresIn = 600; // 10 minutes
+        const command = new client_s3_1.PutObjectCommand({
+            Bucket: r2_js_1.R2_BUCKETS.THUMBNAILS,
+            Key: key,
+            ContentType: mimeType,
+        });
+        const uploadUrl = await (0, s3_request_presigner_1.getSignedUrl)(client, command, { expiresIn });
+        return { uploadUrl, key, expiresIn };
+    },
+    /**
+     * Generate a presigned URL for uploading a category thumbnail to R2
+     */
+    async getCategoryThumbnailPresignedUrl(categoryId, mimeType) {
+        const client = (0, r2_js_1.getR2Client)();
+        const ext = mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';
+        const key = `categories/${categoryId}/thumbnail.${ext}`;
+        const expiresIn = 600;
+        const command = new client_s3_1.PutObjectCommand({
+            Bucket: r2_js_1.R2_BUCKETS.THUMBNAILS,
+            Key: key,
+            ContentType: mimeType,
+        });
+        const uploadUrl = await (0, s3_request_presigner_1.getSignedUrl)(client, command, { expiresIn });
+        return { uploadUrl, key, expiresIn };
+    },
+    /**
+     * Generate a presigned URL for uploading a playlist thumbnail to R2
+     */
+    async getPlaylistThumbnailPresignedUrl(userId, playlistId, mimeType) {
+        const client = (0, r2_js_1.getR2Client)();
+        const ext = mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';
+        const key = `playlists/${userId}/${playlistId}/thumbnail.${ext}`;
+        const expiresIn = 600;
+        const command = new client_s3_1.PutObjectCommand({
+            Bucket: r2_js_1.R2_BUCKETS.THUMBNAILS,
+            Key: key,
+            ContentType: mimeType,
+        });
+        const uploadUrl = await (0, s3_request_presigner_1.getSignedUrl)(client, command, { expiresIn });
+        return { uploadUrl, key, expiresIn };
+    },
+    /**
      * Get public URL for a transcoded video
      */
     getPublicUrl(key) {

@@ -10,7 +10,7 @@ class UploadController {
      */
     async init(req, res) {
         try {
-            const { videoId, filename, fileSize, mimeType, title, description, contentType } = req.body;
+            const { videoId, filename, fileSize, mimeType, title, description, contentType, tags } = req.body;
             const { userId, userType } = (0, authHelpers_js_1.ensureAuthenticatedUser)(req);
             const result = await uploadService.initializeUpload(userId, userType, {
                 filename,
@@ -20,6 +20,7 @@ class UploadController {
                 description,
                 contentType,
                 videoId,
+                tags,
             });
             return res.status(200).json({ success: true, data: result });
         }
@@ -84,7 +85,7 @@ class UploadController {
     /**
      * Queue stats
      */
-    async getQueueStats(req, res) {
+    async getQueueStats(_req, res) {
         try {
             const result = await uploadService.getQueueStats();
             return res.status(200).json({ success: true, ...result });
@@ -125,14 +126,36 @@ class UploadController {
         }
     }
     /**
+     * Get thumbnail upload presigned URL
+     */
+    async getThumbnailUploadUrl(req, res) {
+        try {
+            const { videoId } = req.params;
+            const { userId } = (0, authHelpers_js_1.ensureAuthenticatedUser)(req);
+            const { mimeType } = req.body;
+            if (!mimeType) {
+                return res.status(400).json({ success: false, error: 'mimeType is required' });
+            }
+            const result = await uploadService.getThumbnailUploadUrl(userId, videoId, mimeType);
+            return res.status(200).json({ success: true, data: result });
+        }
+        catch (error) {
+            console.error('[THUMBNAIL-URL] Error:', error);
+            return res.status(400).json({ success: false, error: error.message });
+        }
+    }
+    /**
      * Update video
      */
     async update(req, res) {
         try {
             const { videoId } = req.params;
             const { userId } = (0, authHelpers_js_1.ensureAuthenticatedUser)(req);
-            const { title, description } = req.body;
-            const result = await uploadService.updateVideo(userId, videoId, { title, description });
+            const { title, description, tags, contentType, thumbnail, isDownloadable, isAdultContent, allowLikes, allowDislikes, allowComments, visibility, } = req.body;
+            const result = await uploadService.updateVideo(userId, videoId, {
+                title, description, tags, contentType, thumbnail,
+                isDownloadable, isAdultContent, allowLikes, allowDislikes, allowComments, visibility,
+            });
             return res.status(200).json({ success: true, data: result });
         }
         catch (error) {

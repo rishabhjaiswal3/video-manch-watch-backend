@@ -28,6 +28,18 @@ export declare const r2Service: {
         contentType: string;
     } | null>;
     /**
+     * Generate a presigned URL for uploading a thumbnail image directly to R2
+     */
+    getThumbnailUploadPresignedUrl(userId: string, videoId: string, mimeType: string): Promise<PresignedUrlResponse>;
+    /**
+     * Generate a presigned URL for uploading a category thumbnail to R2
+     */
+    getCategoryThumbnailPresignedUrl(categoryId: string, mimeType: string): Promise<PresignedUrlResponse>;
+    /**
+     * Generate a presigned URL for uploading a playlist thumbnail to R2
+     */
+    getPlaylistThumbnailPresignedUrl(userId: string, playlistId: string, mimeType: string): Promise<PresignedUrlResponse>;
+    /**
      * Get public URL for a transcoded video
      */
     getPublicUrl(key: string): string;

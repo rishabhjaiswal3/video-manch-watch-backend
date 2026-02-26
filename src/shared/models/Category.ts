@@ -7,6 +7,7 @@ export interface ICategory extends Document {
   slug: string;
   isActive: boolean;
   order: number;
+  thumbnailUrl?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -43,6 +44,10 @@ const CategorySchema = new Schema<ICategory>(
     order: {
       type: Number,
       default: 0,
+    },
+    thumbnailUrl: {
+      type: String,
+      default: null,
     },
   },
   {

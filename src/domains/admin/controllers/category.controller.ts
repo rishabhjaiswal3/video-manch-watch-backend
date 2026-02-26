@@ -78,4 +78,46 @@ export class CategoryController {
       return res.status(status).json({ success: false, error: error.message });
     }
   }
+
+  /**
+   * POST /admin/categories/:categoryId/thumbnail-url
+   * Returns a presigned PUT URL for uploading a thumbnail image
+   * body: { mimeType: 'image/jpeg' | 'image/png' | 'image/webp' }
+   */
+  async getThumbnailUploadUrl(req: Request, res: Response) {
+    try {
+      const { categoryId } = req.params;
+      const { mimeType } = req.body;
+      if (!mimeType || !['image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) {
+        return res.status(400).json({ success: false, error: 'Valid mimeType required (image/jpeg, image/png, image/webp)' });
+      }
+      const data = await categoryService.getThumbnailUploadUrl(categoryId, mimeType);
+      return res.status(200).json({ success: true, data });
+    } catch (error: any) {
+      console.error('[CATEGORY-THUMBNAIL-URL] Error:', error);
+      const status = error.message.includes('not found') ? 404 : 400;
+      return res.status(status).json({ success: false, error: error.message });
+    }
+  }
+
+  /**
+   * PATCH /admin/categories/:categoryId/thumbnail
+   * Saves the public thumbnail URL after client finishes the R2 upload
+   * body: { thumbnailUrl: string }
+   */
+  async saveThumbnail(req: Request, res: Response) {
+    try {
+      const { categoryId } = req.params;
+      const { thumbnailUrl } = req.body;
+      if (!thumbnailUrl) {
+        return res.status(400).json({ success: false, error: 'thumbnailUrl is required' });
+      }
+      const data = await categoryService.saveThumbnailUrl(categoryId, thumbnailUrl);
+      return res.status(200).json({ success: true, data });
+    } catch (error: any) {
+      console.error('[CATEGORY-THUMBNAIL-SAVE] Error:', error);
+      const status = error.message.includes('not found') ? 404 : 400;
+      return res.status(status).json({ success: false, error: error.message });
+    }
+  }
 }

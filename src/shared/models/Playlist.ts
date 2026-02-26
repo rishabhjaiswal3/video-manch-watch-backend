@@ -5,6 +5,7 @@ export interface IPlaylist extends Document {
   userId: string;
   title: string;
   videoIds: string[];
+  thumbnailUrl?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -29,6 +30,10 @@ const PlaylistSchema = new Schema<IPlaylist>(
       maxlength: 200,
     },
     videoIds: [{ type: String }],
+    thumbnailUrl: {
+      type: String,
+      default: null,
+    },
   },
   {
     timestamps: true,

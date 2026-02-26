@@ -12,6 +12,8 @@ interface RegisterVODInput {
     sourceStreamId?: string;
 }
 export declare class VideoService {
+    private getProfileMap;
+    private enrichVideoWithChannel;
     /**
      * Register a VOD entry created from live recording.
      */

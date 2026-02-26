@@ -19,7 +19,7 @@ export declare class UploadController {
     /**
      * Queue stats
      */
-    getQueueStats(req: Request, res: Response): Promise<Response<any, Record<string, any>>>;
+    getQueueStats(_req: Request, res: Response): Promise<Response<any, Record<string, any>>>;
     /**
      * Retry upload
      */
@@ -28,6 +28,10 @@ export declare class UploadController {
      * Get Raw URL
      */
     getRawUrl(req: Request, res: Response): Promise<Response<any, Record<string, any>>>;
+    /**
+     * Get thumbnail upload presigned URL
+     */
+    getThumbnailUploadUrl(req: Request, res: Response): Promise<Response<any, Record<string, any>>>;
     /**
      * Update video
      */

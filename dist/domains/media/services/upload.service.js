@@ -41,7 +41,7 @@ class UploadService {
      * Initialize Upload
      */
     async initializeUpload(userId, userType, data) {
-        const { filename, fileSize, mimeType, title, description, contentType, videoId: providedVideoId } = data;
+        const { filename, fileSize, mimeType, title, description, contentType, videoId: providedVideoId, tags } = data;
         // Validation
         const validContentTypes = ['vod', 'reel', 'live'];
         const finalContentType = (contentType && validContentTypes.includes(contentType))
@@ -89,6 +89,7 @@ class UploadService {
                 userType,
                 title,
                 description,
+                tags: tags || [],
                 contentType: finalContentType,
                 originalFile: {
                     filename,
@@ -109,6 +110,8 @@ class UploadService {
             video.title = title;
             if (description)
                 video.description = description;
+            if (tags !== undefined)
+                video.tags = tags;
             video.contentType = finalContentType;
             video.originalFile = { filename, size: fileSize, mimeType, r2Key: presignedData.key };
             video.transcoding = { progress: 0 };
@@ -220,12 +223,19 @@ class UploadService {
                 videoId: v.videoId,
                 title: v.title,
                 description: v.description,
+                tags: v.tags,
                 status: v.status,
                 thumbnail: v.thumbnail,
                 duration: v.duration,
                 outputs: v.outputs,
                 masterPlaylistUrl: v.masterPlaylistUrl,
                 contentType: v.contentType || 'vod',
+                isDownloadable: v.isDownloadable ?? false,
+                isAdultContent: v.isAdultContent ?? false,
+                allowLikes: v.allowLikes ?? true,
+                allowDislikes: v.allowDislikes ?? true,
+                allowComments: v.allowComments ?? true,
+                visibility: v.visibility ?? 'unlisted',
                 transcoding: { progress: v.transcoding?.progress || 0, error: v.transcoding?.error },
                 createdAt: v.createdAt,
                 updatedAt: v.updatedAt,
@@ -319,9 +329,9 @@ class UploadService {
         };
     }
     /**
-     * Update Video
+     * Get thumbnail presigned upload URL
      */
-    async updateVideo(userId, videoId, updates) {
+    async getThumbnailUploadUrl(userId, videoId, mimeType) {
         const video = await Video_js_1.Video.findOne({ videoId });
         if (!video)
             throw new Error('Video not found');
@@ -329,17 +339,78 @@ class UploadService {
             throw new Error('Unauthorized');
         if (video.status === 'deleted')
             throw new Error('Video is deleted');
-        if (updates.title)
-            video.title = updates.title.trim();
-        if (updates.description)
-            video.description = updates.description.trim();
-        await video.save();
+        const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+        if (!ALLOWED_IMAGE_TYPES.includes(mimeType)) {
+            throw new Error('Invalid image type. Allowed: JPEG, PNG, WebP');
+        }
+        const result = await r2Service_js_1.r2Service.getThumbnailUploadPresignedUrl(userId, videoId, mimeType);
         return {
-            videoId: video.videoId,
-            title: video.title,
-            description: video.description,
-            status: video.status,
-            updatedAt: video.updatedAt,
+            uploadUrl: result.uploadUrl,
+            thumbnailKey: result.key,
+            expiresIn: result.expiresIn,
+        };
+    }
+    /**
+     * Update Video
+     *
+     * Uses findOneAndUpdate with $set to avoid full-document re-validation,
+     * which would fail on the outputs[] sub-schema (r2Key required) even though
+     * we are not touching the outputs array at all.
+     */
+    async updateVideo(userId, videoId, updates) {
+        // Auth + existence check first (lean, no save needed)
+        const existing = await Video_js_1.Video.findOne({ videoId }).lean();
+        if (!existing)
+            throw new Error('Video not found');
+        if (existing.userId !== userId)
+            throw new Error('Unauthorized');
+        if (existing.status === 'deleted')
+            throw new Error('Video is deleted');
+        // Build only the fields the caller wants to change
+        const $set = {};
+        if (updates.title !== undefined)
+            $set.title = updates.title.trim();
+        if (updates.description !== undefined)
+            $set.description = updates.description.trim();
+        if (updates.tags !== undefined)
+            $set.tags = updates.tags;
+        if (updates.contentType !== undefined)
+            $set.contentType = updates.contentType;
+        if (updates.thumbnail !== undefined)
+            $set.thumbnail = updates.thumbnail;
+        if (updates.isDownloadable !== undefined)
+            $set.isDownloadable = updates.isDownloadable;
+        if (updates.isAdultContent !== undefined)
+            $set.isAdultContent = updates.isAdultContent;
+        if (updates.allowLikes !== undefined)
+            $set.allowLikes = updates.allowLikes;
+        if (updates.allowDislikes !== undefined)
+            $set.allowDislikes = updates.allowDislikes;
+        if (updates.allowComments !== undefined)
+            $set.allowComments = updates.allowComments;
+        if (updates.visibility !== undefined)
+            $set.visibility = updates.visibility;
+        // findOneAndUpdate with runValidators: false avoids re-validating
+        // the entire document (e.g. the outputs[] sub-schema) when we are
+        // only patching metadata fields.
+        const updated = await Video_js_1.Video.findOneAndUpdate({ videoId, userId }, { $set }, { new: true, runValidators: false });
+        if (!updated)
+            throw new Error('Update failed');
+        return {
+            videoId: updated.videoId,
+            title: updated.title,
+            description: updated.description,
+            tags: updated.tags,
+            contentType: updated.contentType,
+            thumbnail: updated.thumbnail,
+            isDownloadable: updated.isDownloadable,
+            isAdultContent: updated.isAdultContent,
+            allowLikes: updated.allowLikes,
+            allowDislikes: updated.allowDislikes,
+            allowComments: updated.allowComments,
+            visibility: updated.visibility ?? 'unlisted',
+            status: updated.status,
+            updatedAt: updated.updatedAt,
         };
     }
     /**

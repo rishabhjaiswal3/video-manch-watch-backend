@@ -25,5 +25,7 @@ router.get('/categories', (req, res) => categoryController.listAll(req, res));
 router.post('/categories', (req, res) => categoryController.create(req, res));
 router.patch('/categories/:categoryId', (req, res) => categoryController.update(req, res));
 router.delete('/categories/:categoryId', (req, res) => categoryController.delete(req, res));
+router.post('/categories/:categoryId/thumbnail-url', (req, res) => categoryController.getThumbnailUploadUrl(req, res));
+router.patch('/categories/:categoryId/thumbnail', (req, res) => categoryController.saveThumbnail(req, res));
 
 export default router;

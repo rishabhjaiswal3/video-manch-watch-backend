@@ -17,6 +17,7 @@ router.get('/raw-url/:videoId', (req, res) => uploadController.getRawUrl(req, re
 router.post('/init', rateLimiter_js_1.uploadLimiter, (req, res) => uploadController.init(req, res));
 router.post('/complete', (req, res) => uploadController.complete(req, res));
 router.post('/retry/:videoId', (req, res) => uploadController.retry(req, res));
+router.post('/thumbnail-url/:videoId', (req, res) => uploadController.getThumbnailUploadUrl(req, res));
 router.patch('/video/:videoId', (req, res) => uploadController.update(req, res));
 router.delete('/video/:videoId', (req, res) => uploadController.delete(req, res));
 exports.default = router;

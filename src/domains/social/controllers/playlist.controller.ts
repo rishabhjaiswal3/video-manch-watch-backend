@@ -51,6 +51,30 @@ export class PlaylistController {
     }
 
     /**
+     * PATCH /playlists/:playlistId — rename a playlist
+     * body: { title }
+     */
+    async update(req: Request, res: Response) {
+        try {
+            const { userId } = ensureAuthenticatedUser(req);
+            const { playlistId } = req.params;
+            const { title } = req.body;
+            if (!title || !title.trim()) {
+                return res.status(400).json({ success: false, error: 'Title is required' });
+            }
+            if (title.trim().length > 200) {
+                return res.status(400).json({ success: false, error: 'Title too long (max 200 characters)' });
+            }
+            const result = await playlistService.updatePlaylist(userId, playlistId, title);
+            return res.status(200).json({ success: true, data: result });
+        } catch (error: any) {
+            console.error('[PLAYLIST-UPDATE] Error:', error);
+            const status = error.message.includes('not found') ? 404 : 400;
+            return res.status(status).json({ success: false, error: error.message });
+        }
+    }
+
+    /**
      * GET /playlists/:playlistId — get a single playlist
      */
     async get(req: Request, res: Response) {
@@ -109,6 +133,48 @@ export class PlaylistController {
             return res.status(200).json({ success: true, data: result });
         } catch (error: any) {
             console.error('[PLAYLIST-REMOVE-VIDEO] Error:', error);
+            const status = error.message.includes('not found') ? 404 : 400;
+            return res.status(status).json({ success: false, error: error.message });
+        }
+    }
+
+    /**
+     * POST /playlists/:playlistId/thumbnail-url
+     * body: { mimeType }
+     */
+    async getThumbnailUploadUrl(req: Request, res: Response) {
+        try {
+            const { userId } = ensureAuthenticatedUser(req);
+            const { playlistId } = req.params;
+            const { mimeType } = req.body;
+            if (!mimeType || !['image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) {
+                return res.status(400).json({ success: false, error: 'Valid mimeType required (image/jpeg, image/png, image/webp)' });
+            }
+            const result = await playlistService.getThumbnailUploadUrl(userId, playlistId, mimeType);
+            return res.status(200).json({ success: true, data: result });
+        } catch (error: any) {
+            console.error('[PLAYLIST-THUMBNAIL-URL] Error:', error);
+            const status = error.message.includes('not found') ? 404 : 400;
+            return res.status(status).json({ success: false, error: error.message });
+        }
+    }
+
+    /**
+     * PATCH /playlists/:playlistId/thumbnail
+     * body: { thumbnailUrl }
+     */
+    async saveThumbnail(req: Request, res: Response) {
+        try {
+            const { userId } = ensureAuthenticatedUser(req);
+            const { playlistId } = req.params;
+            const { thumbnailUrl } = req.body;
+            if (!thumbnailUrl) {
+                return res.status(400).json({ success: false, error: 'thumbnailUrl is required' });
+            }
+            const result = await playlistService.saveThumbnailUrl(userId, playlistId, thumbnailUrl);
+            return res.status(200).json({ success: true, data: result });
+        } catch (error: any) {
+            console.error('[PLAYLIST-THUMBNAIL-SAVE] Error:', error);
             const status = error.message.includes('not found') ? 404 : 400;
             return res.status(status).json({ success: false, error: error.message });
         }

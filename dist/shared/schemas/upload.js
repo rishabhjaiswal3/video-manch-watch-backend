@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.completeUploadSchema = exports.initUploadSchema = void 0;
+exports.thumbnailUrlSchema = exports.updateVideoSchema = exports.completeUploadSchema = exports.initUploadSchema = void 0;
 const zod_1 = require("zod");
 const ALLOWED_MIME_TYPES = [
     'video/mp4',
@@ -35,8 +35,32 @@ exports.initUploadSchema = zod_1.z.object({
         .max(5000, 'Description is too long')
         .optional()
         .transform((val) => val?.trim()),
+    tags: zod_1.z
+        .array(zod_1.z.string().min(1).max(50).transform((val) => val.trim()))
+        .max(10, 'Maximum 10 tags allowed')
+        .optional()
+        .default([]),
+    contentType: zod_1.z.enum(['vod', 'reel', 'live']).optional(),
 });
 exports.completeUploadSchema = zod_1.z.object({
     videoId: zod_1.z.string().uuid('Invalid video ID format'),
+});
+exports.updateVideoSchema = zod_1.z.object({
+    title: zod_1.z.string().min(1).max(200).transform((v) => v.trim()).optional(),
+    description: zod_1.z.string().max(5000).optional().transform((v) => v?.trim()),
+    tags: zod_1.z.array(zod_1.z.string().min(1).max(50).transform((v) => v.trim())).max(10).optional(),
+    contentType: zod_1.z.enum(['vod', 'reel', 'live']).optional(),
+    thumbnail: zod_1.z.string().max(500).optional(),
+    isDownloadable: zod_1.z.boolean().optional(),
+    isAdultContent: zod_1.z.boolean().optional(),
+    allowLikes: zod_1.z.boolean().optional(),
+    allowDislikes: zod_1.z.boolean().optional(),
+    allowComments: zod_1.z.boolean().optional(),
+    visibility: zod_1.z.enum(['listed', 'unlisted']).optional(),
+});
+exports.thumbnailUrlSchema = zod_1.z.object({
+    mimeType: zod_1.z.enum(['image/jpeg', 'image/png', 'image/webp'], {
+        errorMap: () => ({ message: 'Invalid image type. Allowed: JPEG, PNG, WebP' }),
+    }),
 });
 //# sourceMappingURL=upload.js.map
