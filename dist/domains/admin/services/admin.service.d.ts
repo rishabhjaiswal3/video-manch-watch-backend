@@ -50,6 +50,42 @@ export declare class AdminService {
             totalUsers: number;
             byType: Record<string, number>;
         };
+        transcoding: {
+            videos: {
+                totalVideos: number;
+                byStatus: Record<string, number>;
+            };
+            queues: {
+                user: {
+                    waiting: number;
+                    active: number;
+                    completed: number;
+                    failed: number;
+                };
+                creator: {
+                    waiting: number;
+                    active: number;
+                    completed: number;
+                    failed: number;
+                };
+            };
+            performance: {
+                avgDownloadMs: number;
+                avgTranscodeMs: number;
+                avgUploadMs: number;
+                avgTotalMs: number;
+            };
+            storage: {
+                totalOriginalSize: number;
+                totalTranscodedSize: number;
+            };
+            successRate: number;
+            activeViewers: number;
+        };
+        playback: {
+            totalViews: number;
+            totalWatchTime: number;
+        };
         recentUsers: {
             id: string;
             email: string;

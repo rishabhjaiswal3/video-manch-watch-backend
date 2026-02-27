@@ -2,6 +2,9 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AdminService = void 0;
 const User_js_1 = require("../../../shared/models/User.js");
+const Video_js_1 = require("../../../shared/models/Video.js");
+const VideoAnalytics_js_1 = require("../../../shared/models/VideoAnalytics.js");
+const queueService_js_1 = require("../../../infra/queue/queueService.js");
 class AdminService {
     /**
      * Get paginated list of all users
@@ -84,13 +87,52 @@ class AdminService {
      * Get platform statistics
      */
     async getStats() {
-        const [userCounts, recentUsers] = await Promise.all([
+        const [userCounts, recentUsers, videoStatusCounts, transcodingPerformance, storageStats, activeViewers, playbackTotals, userQueueStats, creatorQueueStats,] = await Promise.all([
             User_js_1.User.aggregate([{ $group: { _id: '$userType', count: { $sum: 1 } } }]),
             User_js_1.User.find()
                 .select('-password -refreshToken')
                 .sort({ createdAt: -1 })
                 .limit(5)
                 .lean(),
+            Video_js_1.Video.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+            Video_js_1.Video.aggregate([
+                {
+                    $match: {
+                        status: 'completed',
+                        'kpis.timings.total': { $exists: true },
+                    },
+                },
+                {
+                    $group: {
+                        _id: null,
+                        avgDownloadMs: { $avg: { $ifNull: ['$kpis.timings.download', 0] } },
+                        avgTranscodeMs: { $avg: { $ifNull: ['$kpis.timings.transcode', 0] } },
+                        avgUploadMs: { $avg: { $ifNull: ['$kpis.timings.upload', 0] } },
+                        avgTotalMs: { $avg: { $ifNull: ['$kpis.timings.total', 0] } },
+                    },
+                },
+            ]),
+            Video_js_1.Video.aggregate([
+                {
+                    $group: {
+                        _id: null,
+                        totalOriginalSize: { $sum: { $ifNull: ['$originalFile.size', 0] } },
+                        totalTranscodedSize: { $sum: { $ifNull: ['$kpis.sizes.total', 0] } },
+                    },
+                },
+            ]),
+            VideoAnalytics_js_1.ActiveSession.countDocuments(),
+            VideoAnalytics_js_1.VideoAnalytics.aggregate([
+                {
+                    $group: {
+                        _id: null,
+                        totalViews: { $sum: '$views' },
+                        totalWatchTime: { $sum: '$totalWatchTime' },
+                    },
+                },
+            ]),
+            queueService_js_1.queueService.getQueueStats('user'),
+            queueService_js_1.queueService.getQueueStats('creator'),
         ]);
         const stats = {
             totalUsers: 0,
@@ -106,8 +148,67 @@ class AdminService {
             }
             stats.totalUsers += item.count;
         });
+        const videoStats = {
+            totalVideos: 0,
+            byStatus: {
+                pending: 0,
+                uploading: 0,
+                queued: 0,
+                processing: 0,
+                completed: 0,
+                failed: 0,
+                deleted: 0,
+            },
+        };
+        videoStatusCounts.forEach((item) => {
+            if (item._id in videoStats.byStatus) {
+                videoStats.byStatus[item._id] = item.count;
+            }
+            videoStats.totalVideos += item.count;
+        });
+        const perf = transcodingPerformance[0] || {
+            avgDownloadMs: 0,
+            avgTranscodeMs: 0,
+            avgUploadMs: 0,
+            avgTotalMs: 0,
+        };
+        const storage = storageStats[0] || {
+            totalOriginalSize: 0,
+            totalTranscodedSize: 0,
+        };
+        const playback = playbackTotals[0] || {
+            totalViews: 0,
+            totalWatchTime: 0,
+        };
+        const completed = videoStats.byStatus.completed || 0;
+        const failed = videoStats.byStatus.failed || 0;
+        const finished = completed + failed;
+        const successRate = finished > 0 ? Number(((completed / finished) * 100).toFixed(1)) : 100;
         return {
             stats,
+            transcoding: {
+                videos: videoStats,
+                queues: {
+                    user: userQueueStats,
+                    creator: creatorQueueStats,
+                },
+                performance: {
+                    avgDownloadMs: Math.round(perf.avgDownloadMs || 0),
+                    avgTranscodeMs: Math.round(perf.avgTranscodeMs || 0),
+                    avgUploadMs: Math.round(perf.avgUploadMs || 0),
+                    avgTotalMs: Math.round(perf.avgTotalMs || 0),
+                },
+                storage: {
+                    totalOriginalSize: Math.round(storage.totalOriginalSize || 0),
+                    totalTranscodedSize: Math.round(storage.totalTranscodedSize || 0),
+                },
+                successRate,
+                activeViewers,
+            },
+            playback: {
+                totalViews: Math.round(playback.totalViews || 0),
+                totalWatchTime: Math.round(playback.totalWatchTime || 0),
+            },
             recentUsers: recentUsers.map((u) => ({
                 id: u._id.toString(),
                 email: u.email,
