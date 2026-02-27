@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.liveChatLimiter = exports.liveLimiter = exports.playbackLimiter = exports.uploadLimiter = exports.otpVerifyLimiter = exports.authLimiter = exports.apiLimiter = void 0;
+exports.liveChatLimiter = exports.liveLimiter = exports.playbackLimiter = exports.uploadBatchLimiter = exports.uploadLimiter = exports.otpVerifyLimiter = exports.authLimiter = exports.apiLimiter = void 0;
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 // General API rate limiter
 exports.apiLimiter = (0, express_rate_limit_1.default)({
@@ -55,6 +55,17 @@ exports.uploadLimiter = (0, express_rate_limit_1.default)({
     message: {
         success: false,
         error: 'Upload limit reached. Please try again later.',
+    },
+});
+// Batch upload init limiter
+exports.uploadBatchLimiter = (0, express_rate_limit_1.default)({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+        success: false,
+        error: 'Bulk upload init limit reached. Please try again later.',
     },
 });
 // Higher limit for playback/stream endpoints (video players make many requests)

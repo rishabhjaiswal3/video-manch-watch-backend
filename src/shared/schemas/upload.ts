@@ -3,8 +3,14 @@ import { z } from 'zod';
 const ALLOWED_MIME_TYPES = [
   'video/mp4',
   'video/quicktime',
+  'video/mov',
+  'video/x-quicktime',
   'video/x-msvideo',
+  'video/avi',
   'video/x-matroska',
+  'video/matroska',
+  'video/mkv',
+  'application/x-matroska',
   'video/webm',
 ];
 
@@ -49,6 +55,15 @@ export const completeUploadSchema = z.object({
   videoId: z.string().uuid('Invalid video ID format'),
 });
 
+export const initUploadBatchSchema = z.object({
+  idempotencyKey: z.string().min(8).max(128).optional(),
+  items: z.array(
+    initUploadSchema.extend({
+      clientId: z.string().min(1).max(100),
+    })
+  ).min(1, 'At least one item is required').max(25, 'Maximum 25 items allowed per batch'),
+});
+
 export const updateVideoSchema = z.object({
   title: z.string().min(1).max(200).transform((v) => v.trim()).optional(),
   description: z.string().max(5000).optional().transform((v) => v?.trim()),
@@ -70,6 +85,7 @@ export const thumbnailUrlSchema = z.object({
 });
 
 export type InitUploadInput = z.infer<typeof initUploadSchema>;
+export type InitUploadBatchInput = z.infer<typeof initUploadBatchSchema>;
 export type CompleteUploadInput = z.infer<typeof completeUploadSchema>;
 export type UpdateVideoInput = z.infer<typeof updateVideoSchema>;
 export type ThumbnailUrlInput = z.infer<typeof thumbnailUrlSchema>;

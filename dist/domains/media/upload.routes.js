@@ -4,6 +4,8 @@ const express_1 = require("express");
 const auth_js_1 = require("../../shared/middleware/auth.js");
 const rateLimiter_js_1 = require("../../shared/middleware/rateLimiter.js");
 const upload_controller_js_1 = require("./controllers/upload.controller.js");
+const validate_js_1 = require("../../shared/middleware/validate.js");
+const upload_js_1 = require("../../shared/schemas/upload.js");
 const router = (0, express_1.Router)();
 const uploadController = new upload_controller_js_1.UploadController();
 // Shared middleware
@@ -14,11 +16,12 @@ router.get('/queue-stats', (req, res) => uploadController.getQueueStats(req, res
 router.get('/status/:videoId', (req, res) => uploadController.getStatus(req, res));
 router.get('/raw-url/:videoId', (req, res) => uploadController.getRawUrl(req, res));
 // Actions (Protected/Mutative)
-router.post('/init', rateLimiter_js_1.uploadLimiter, (req, res) => uploadController.init(req, res));
-router.post('/complete', (req, res) => uploadController.complete(req, res));
+router.post('/init/batch', rateLimiter_js_1.uploadBatchLimiter, (0, validate_js_1.validate)(upload_js_1.initUploadBatchSchema), (req, res) => uploadController.initBatch(req, res));
+router.post('/init', rateLimiter_js_1.uploadLimiter, (0, validate_js_1.validate)(upload_js_1.initUploadSchema), (req, res) => uploadController.init(req, res));
+router.post('/complete', (0, validate_js_1.validate)(upload_js_1.completeUploadSchema), (req, res) => uploadController.complete(req, res));
 router.post('/retry/:videoId', (req, res) => uploadController.retry(req, res));
-router.post('/thumbnail-url/:videoId', (req, res) => uploadController.getThumbnailUploadUrl(req, res));
-router.patch('/video/:videoId', (req, res) => uploadController.update(req, res));
+router.post('/thumbnail-url/:videoId', (0, validate_js_1.validate)(upload_js_1.thumbnailUrlSchema), (req, res) => uploadController.getThumbnailUploadUrl(req, res));
+router.patch('/video/:videoId', (0, validate_js_1.validate)(upload_js_1.updateVideoSchema), (req, res) => uploadController.update(req, res));
 router.delete('/video/:videoId', (req, res) => uploadController.delete(req, res));
 exports.default = router;
 //# sourceMappingURL=upload.routes.js.map

@@ -48,7 +48,7 @@ function formatDuration(seconds: number): string {
 const ensureCanAccessUserAnalytics = (req: Request, res: Response): boolean => {
     const authUser = ensureAuthenticatedUser(req);
     const requestedUserId = req.params.userId;
-    if (authUser.userType !== 'admin' && authUser.userId !== requestedUserId) {
+    if (!authUser.roles.includes('admin') && authUser.userId !== requestedUserId) {
         res.status(403).json({ success: false, error: 'Forbidden.' });
         return false;
     }

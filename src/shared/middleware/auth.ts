@@ -6,6 +6,7 @@ interface TokenPayload {
   userId: string;
   email: string;
   userType: 'user' | 'creator' | 'admin';
+  roles?: Array<'user' | 'creator' | 'admin'>;
 }
 
 export const authenticate = (
@@ -40,11 +41,14 @@ export const authenticate = (
     }
 
     const decoded = jwt.verify(token, secret) as TokenPayload;
+    const roleSet = new Set<'user' | 'creator' | 'admin'>(decoded.roles || []);
+    roleSet.add(decoded.userType);
 
     const authenticatedUser: AuthenticatedUser = {
       userId: decoded.userId,
       email: decoded.email,
       userType: decoded.userType,
+      roles: Array.from(roleSet),
     };
 
     req.user = authenticatedUser;

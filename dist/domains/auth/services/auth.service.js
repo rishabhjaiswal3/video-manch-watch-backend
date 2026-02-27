@@ -43,7 +43,7 @@ class AuthService {
             user.roles.push(selectedRole);
         }
         user.userType = selectedRole;
-        const { accessToken, refreshToken } = this.generateTokens(user._id.toString(), user.email, selectedRole);
+        const { accessToken, refreshToken } = this.generateTokens(user._id.toString(), user.email, selectedRole, user.roles);
         user.refreshToken = await bcryptjs_1.default.hash(refreshToken, 10);
         await user.save();
         return {
@@ -52,6 +52,7 @@ class AuthService {
                 userId: user._id.toString(),
                 email: user.email,
                 userType: selectedRole,
+                roles: user.roles,
             },
             accessToken,
             refreshToken,
@@ -60,13 +61,14 @@ class AuthService {
     /**
      * Helper to generate tokens
      */
-    generateTokens(userId, email, userType) {
+    generateTokens(userId, email, userType, roles) {
         const accessSecret = process.env.JWT_SECRET;
         const refreshSecret = process.env.REFRESH_TOKEN_SECRET;
         const accessExpiry = (process.env.JWT_EXPIRES_IN || '2d');
         const refreshExpiry = (process.env.REFRESH_TOKEN_EXPIRES_IN || '7d');
-        const accessToken = jsonwebtoken_1.default.sign({ userId, email, userType }, accessSecret, { expiresIn: accessExpiry });
-        const refreshToken = jsonwebtoken_1.default.sign({ userId, email, userType }, refreshSecret, { expiresIn: refreshExpiry });
+        const payload = { userId, email, userType, roles };
+        const accessToken = jsonwebtoken_1.default.sign(payload, accessSecret, { expiresIn: accessExpiry });
+        const refreshToken = jsonwebtoken_1.default.sign(payload, refreshSecret, { expiresIn: refreshExpiry });
         return { accessToken, refreshToken };
     }
     /**
@@ -214,10 +216,12 @@ class AuthService {
         }
         // 4. Generate NEW pair
         this.ensureRoles(user);
-        const nextRole = user.roles.includes(decoded.userType)
+        const tokenRoles = Array.isArray(decoded.roles) ? decoded.roles : [];
+        const validTokenRole = tokenRoles.find((role) => user.roles.includes(role));
+        const nextRole = (user.roles.includes(decoded.userType)
             ? decoded.userType
-            : user.userType;
-        const { accessToken, refreshToken } = this.generateTokens(decoded.userId, decoded.email, nextRole);
+            : validTokenRole || user.userType);
+        const { accessToken, refreshToken } = this.generateTokens(decoded.userId, decoded.email, nextRole, user.roles);
         // 5. Save new hashed refresh token (invalidates old one)
         user.refreshToken = await bcryptjs_1.default.hash(refreshToken, 10);
         user.userType = nextRole;
@@ -229,6 +233,7 @@ class AuthService {
                 userId: user._id.toString(),
                 email: user.email,
                 userType: nextRole,
+                roles: user.roles,
             },
         };
     }

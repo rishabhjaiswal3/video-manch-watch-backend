@@ -4,6 +4,7 @@ export interface AuthenticatedUser {
     userId: string;
     email: string;
     userType: UserType;
+    roles: UserType[];
 }
 export interface AuthenticatedRequest<P = Record<string, string>, ResBody = any, ReqBody = any, ReqQuery = Record<string, any>> extends Request<P, ResBody, ReqBody, ReqQuery> {
     user: AuthenticatedUser;

@@ -19,7 +19,7 @@ class PlaylistService {
         const allPreviewIds = [...new Set(playlists.flatMap(p => p.videoIds.slice(0, 8)))];
         const previewVideos = allPreviewIds.length > 0
             ? await Video_js_1.Video.find({ videoId: { $in: allPreviewIds } })
-                .select('videoId title thumbnail')
+                .select('videoId title thumbnail duration')
                 .lean()
             : [];
         const videoMap = new Map(previewVideos.map(v => [v.videoId, v]));
@@ -32,7 +32,12 @@ class PlaylistService {
             previewVideos: p.videoIds.slice(0, 8)
                 .map(id => videoMap.get(id))
                 .filter((v) => v !== undefined)
-                .map(v => ({ videoId: v.videoId, title: v.title, thumbnail: v.thumbnail ?? null })),
+                .map(v => ({
+                videoId: v.videoId,
+                title: v.title,
+                thumbnail: v.thumbnail ?? null,
+                duration: v.duration ?? null,
+            })),
             createdAt: p.createdAt,
             updatedAt: p.updatedAt,
         }));

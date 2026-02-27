@@ -10,6 +10,7 @@ export interface AuthSuccess {
         userId: string;
         email: string;
         userType: 'user' | 'creator' | 'admin';
+        roles: Array<'user' | 'creator' | 'admin'>;
     };
     accessToken: string;
     refreshToken: string;
@@ -57,7 +58,12 @@ export class AuthService {
             user.roles.push(selectedRole);
         }
         user.userType = selectedRole;
-        const { accessToken, refreshToken } = this.generateTokens(user._id.toString(), user.email, selectedRole);
+        const { accessToken, refreshToken } = this.generateTokens(
+            user._id.toString(),
+            user.email,
+            selectedRole,
+            user.roles
+        );
         user.refreshToken = await bcrypt.hash(refreshToken, 10);
         await user.save();
 
@@ -67,6 +73,7 @@ export class AuthService {
                 userId: user._id.toString(),
                 email: user.email,
                 userType: selectedRole,
+                roles: user.roles,
             },
             accessToken,
             refreshToken,
@@ -76,14 +83,20 @@ export class AuthService {
     /**
      * Helper to generate tokens
      */
-    private generateTokens(userId: string, email: string, userType: string) {
+    private generateTokens(
+        userId: string,
+        email: string,
+        userType: string,
+        roles: Array<'user' | 'creator' | 'admin'>
+    ) {
         const accessSecret = process.env.JWT_SECRET!;
         const refreshSecret = process.env.REFRESH_TOKEN_SECRET!;
         const accessExpiry = (process.env.JWT_EXPIRES_IN || '2d') as jwt.SignOptions['expiresIn'];
         const refreshExpiry = (process.env.REFRESH_TOKEN_EXPIRES_IN || '7d') as jwt.SignOptions['expiresIn'];
 
-        const accessToken = jwt.sign({ userId, email, userType }, accessSecret, { expiresIn: accessExpiry });
-        const refreshToken = jwt.sign({ userId, email, userType }, refreshSecret, { expiresIn: refreshExpiry });
+        const payload = { userId, email, userType, roles };
+        const accessToken = jwt.sign(payload, accessSecret, { expiresIn: accessExpiry });
+        const refreshToken = jwt.sign(payload, refreshSecret, { expiresIn: refreshExpiry });
 
         return { accessToken, refreshToken };
     }
@@ -277,7 +290,12 @@ export class AuthService {
         const refreshSecret = process.env.REFRESH_TOKEN_SECRET!;
 
         // 1. Verify token signature
-        const decoded = jwt.verify(token, refreshSecret) as { userId: string; email: string; userType: string };
+        const decoded = jwt.verify(token, refreshSecret) as {
+            userId: string;
+            email: string;
+            userType: string;
+            roles?: Array<'user' | 'creator' | 'admin'>;
+        };
 
         // 2. Find user
         const user = await User.findById(decoded.userId);
@@ -293,14 +311,16 @@ export class AuthService {
 
         // 4. Generate NEW pair
         this.ensureRoles(user);
-        const nextRole = user.roles.includes(decoded.userType as any)
+        const tokenRoles = Array.isArray(decoded.roles) ? decoded.roles : [];
+        const validTokenRole = tokenRoles.find((role) => user.roles.includes(role));
+        const nextRole = (user.roles.includes(decoded.userType as any)
             ? decoded.userType
-            : user.userType;
-        const { accessToken, refreshToken } = this.generateTokens(decoded.userId, decoded.email, nextRole);
+            : validTokenRole || user.userType) as 'user' | 'creator' | 'admin';
+        const { accessToken, refreshToken } = this.generateTokens(decoded.userId, decoded.email, nextRole, user.roles);
 
         // 5. Save new hashed refresh token (invalidates old one)
         user.refreshToken = await bcrypt.hash(refreshToken, 10);
-        user.userType = nextRole as 'user' | 'creator' | 'admin';
+        user.userType = nextRole;
         await user.save();
 
         return {
@@ -309,7 +329,8 @@ export class AuthService {
             user: {
                 userId: user._id.toString(),
                 email: user.email,
-                userType: nextRole as 'user' | 'creator' | 'admin',
+                userType: nextRole,
+                roles: user.roles,
             },
         };
     }

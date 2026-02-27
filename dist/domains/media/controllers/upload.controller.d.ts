@@ -1,6 +1,10 @@
 import { Request, Response } from 'express';
 export declare class UploadController {
     /**
+     * Initialize upload in batch
+     */
+    initBatch(req: Request, res: Response): Promise<Response<any, Record<string, any>>>;
+    /**
      * Initialize upload
      */
     init(req: Request, res: Response): Promise<Response<any, Record<string, any>>>;

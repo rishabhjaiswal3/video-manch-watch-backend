@@ -28,10 +28,13 @@ const authenticate = (req, res, next) => {
             throw new Error('JWT_SECRET is not defined in environment variables');
         }
         const decoded = jsonwebtoken_1.default.verify(token, secret);
+        const roleSet = new Set(decoded.roles || []);
+        roleSet.add(decoded.userType);
         const authenticatedUser = {
             userId: decoded.userId,
             email: decoded.email,
             userType: decoded.userType,
+            roles: Array.from(roleSet),
         };
         req.user = authenticatedUser;
         next();

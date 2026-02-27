@@ -1,4 +1,28 @@
 export declare class UploadService {
+    private enforceUserActiveUploadQuota;
+    initializeUploadBatch(userId: string, userType: 'user' | 'creator' | 'admin', items: Array<{
+        clientId?: string;
+        filename: string;
+        fileSize: number;
+        mimeType: string;
+        title: string;
+        description?: string;
+        contentType?: string;
+        videoId?: string;
+        tags?: string[];
+    }>): Promise<{
+        results: {
+            clientId?: string;
+            success: boolean;
+            data?: {
+                videoId: string;
+                uploadUrl: string;
+                r2Key: string;
+                expiresIn: number;
+            };
+            error?: string;
+        }[];
+    }>;
     /**
      * Helper: Update status with history
      */
@@ -15,6 +39,8 @@ export declare class UploadService {
         contentType?: string;
         videoId?: string;
         tags?: string[];
+    }, options?: {
+        skipQuotaCheck?: boolean;
     }): Promise<{
         videoId: string;
         uploadUrl: string;

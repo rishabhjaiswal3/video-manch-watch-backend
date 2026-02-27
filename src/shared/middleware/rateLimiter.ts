@@ -56,6 +56,18 @@ export const uploadLimiter = rateLimit({
   },
 });
 
+// Batch upload init limiter
+export const uploadBatchLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: 'Bulk upload init limit reached. Please try again later.',
+  },
+});
+
 // Higher limit for playback/stream endpoints (video players make many requests)
 export const playbackLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute

@@ -6,19 +6,110 @@ import { R2_BUCKETS } from '../../../shared/config/r2.js';
 
 // Constants
 const ALLOWED_MIME_TYPES = [
-    'video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska', 'video/webm'
+    'video/mp4',
+    'video/quicktime',
+    'video/mov',
+    'video/x-quicktime',
+    'video/x-msvideo',
+    'video/avi',
+    'video/x-matroska',
+    'video/matroska',
+    'video/mkv',
+    'application/x-matroska',
+    'video/webm'
 ];
+const MIME_ALIAS_MAP: Record<string, string> = {
+    'video/mov': 'video/quicktime',
+    'video/x-quicktime': 'video/quicktime',
+    'video/avi': 'video/x-msvideo',
+    'video/matroska': 'video/x-matroska',
+    'video/mkv': 'video/x-matroska',
+    'application/x-matroska': 'video/x-matroska',
+};
 const MAX_USER_SIZE = 2 * 1024 * 1024 * 1024; // 2GB
 const MAX_CREATOR_SIZE = 30 * 1024 * 1024 * 1024; // 30GB
 const MAX_UPLOAD_RETRIES = 3;
 const MAX_TRANSCODING_RETRIES = 3;
 const RETRYABLE_STATUSES = ['failed', 'pending'];
+const ACTIVE_UPLOAD_STATUSES = ['pending', 'uploading', 'queued', 'processing'];
+const MAX_ACTIVE_UPLOADS_PER_USER = Number(process.env.MAX_ACTIVE_UPLOADS_PER_USER || 1200);
 
 // Queue Stats Cache
 let statsCache: { data: unknown; timestamp: number } | null = null;
 const STATS_CACHE_TTL = 30000;
 
 export class UploadService {
+    private async enforceUserActiveUploadQuota(userId: string, increment: number = 1) {
+        const activeCount = await Video.countDocuments({
+            userId,
+            status: { $in: ACTIVE_UPLOAD_STATUSES },
+        });
+        if (activeCount + increment > MAX_ACTIVE_UPLOADS_PER_USER) {
+            throw new Error(
+                `Active upload limit reached (${MAX_ACTIVE_UPLOADS_PER_USER}). Complete or remove existing uploads before adding more.`
+            );
+        }
+    }
+
+    async initializeUploadBatch(
+        userId: string,
+        userType: 'user' | 'creator' | 'admin',
+        items: Array<{
+            clientId?: string;
+            filename: string;
+            fileSize: number;
+            mimeType: string;
+            title: string;
+            description?: string;
+            contentType?: string;
+            videoId?: string;
+            tags?: string[];
+        }>
+    ) {
+        const MAX_BATCH_SIZE = 25;
+        if (!Array.isArray(items) || items.length === 0) {
+            throw new Error('items array is required');
+        }
+        if (items.length > MAX_BATCH_SIZE) {
+            throw new Error(`Maximum ${MAX_BATCH_SIZE} files allowed per batch.`);
+        }
+
+        const newItemCount = items.filter((item) => !item.videoId).length;
+        if (newItemCount > 0) {
+            await this.enforceUserActiveUploadQuota(userId, newItemCount);
+        }
+
+        const results: Array<{
+            clientId?: string;
+            success: boolean;
+            data?: {
+                videoId: string;
+                uploadUrl: string;
+                r2Key: string;
+                expiresIn: number;
+            };
+            error?: string;
+        }> = [];
+
+        for (const item of items) {
+            try {
+                const data = await this.initializeUpload(userId, userType, item, { skipQuotaCheck: true });
+                results.push({
+                    clientId: item.clientId,
+                    success: true,
+                    data,
+                });
+            } catch (error: any) {
+                results.push({
+                    clientId: item.clientId,
+                    success: false,
+                    error: error?.message || 'Failed to initialize upload',
+                });
+            }
+        }
+
+        return { results };
+    }
 
     /**
      * Helper: Update status with history
@@ -57,9 +148,13 @@ export class UploadService {
             contentType?: string;
             videoId?: string;
             tags?: string[];
+        },
+        options?: {
+            skipQuotaCheck?: boolean;
         }
     ) {
         const { filename, fileSize, mimeType, title, description, contentType, videoId: providedVideoId, tags } = data;
+        const normalizedMimeType = MIME_ALIAS_MAP[mimeType.toLowerCase()] || mimeType.toLowerCase();
 
         // Validation
         const validContentTypes = ['vod', 'reel', 'live'];
@@ -67,7 +162,7 @@ export class UploadService {
             ? (contentType as 'vod' | 'reel' | 'live')
             : 'vod';
 
-        if (!ALLOWED_MIME_TYPES.includes(mimeType)) {
+        if (!ALLOWED_MIME_TYPES.includes(normalizedMimeType)) {
             throw new Error(`Invalid file type. Allowed: ${ALLOWED_MIME_TYPES.join(', ')}`);
         }
 
@@ -101,12 +196,16 @@ export class UploadService {
             videoId = uuidv4();
         }
 
+        if (!video && !options?.skipQuotaCheck) {
+            await this.enforceUserActiveUploadQuota(userId, 1);
+        }
+
         // Generate R2 Presigned URL
         const presignedData = await r2Service.getUploadPresignedUrl(
             userId,
             videoId!,
             filename,
-            mimeType,
+            normalizedMimeType,
             userType
         );
 
@@ -125,7 +224,7 @@ export class UploadService {
                 originalFile: {
                     filename,
                     size: fileSize,
-                    mimeType,
+                    mimeType: normalizedMimeType,
                     r2Key: presignedData.key,
                 },
                 status: 'pending',
@@ -141,7 +240,7 @@ export class UploadService {
             if (description) video.description = description;
             if (tags !== undefined) video.tags = tags;
             video.contentType = finalContentType;
-            video.originalFile = { filename, size: fileSize, mimeType, r2Key: presignedData.key };
+            video.originalFile = { filename, size: fileSize, mimeType: normalizedMimeType, r2Key: presignedData.key };
             video.transcoding = { progress: 0 };
             video.transcodingCompleted = false;
             video.outputs = [];

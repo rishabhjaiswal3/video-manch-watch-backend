@@ -1,10 +1,52 @@
 import { Request, Response } from 'express';
 import { UploadService } from '../services/upload.service.js';
 import { ensureAuthenticatedUser } from '../../../shared/utils/authHelpers.js';
+import { getRedisConnection } from '../../../shared/config/redis.js';
 
 const uploadService = new UploadService();
 
 export class UploadController {
+    /**
+     * Initialize upload in batch
+     */
+    async initBatch(req: Request, res: Response) {
+        try {
+            const { items, idempotencyKey } = req.body;
+            const { userId, userType } = ensureAuthenticatedUser(req);
+            const requestIdempotencyKey = String(idempotencyKey || req.headers['x-idempotency-key'] || '').trim();
+            const cacheKey = requestIdempotencyKey
+                ? `upload_init_batch:${userId}:${requestIdempotencyKey}`
+                : null;
+
+            if (cacheKey) {
+                try {
+                    const redis = getRedisConnection();
+                    const cached = await redis.get(cacheKey);
+                    if (cached) {
+                        return res.status(200).json({ success: true, data: JSON.parse(cached), idempotentReplay: true });
+                    }
+                } catch (cacheReadError) {
+                    console.warn('[UPLOAD-INIT-BATCH] Idempotency cache read failed:', cacheReadError);
+                }
+            }
+
+            const result = await uploadService.initializeUploadBatch(userId, userType, items || []);
+
+            if (cacheKey) {
+                try {
+                    const redis = getRedisConnection();
+                    await redis.set(cacheKey, JSON.stringify(result), 'EX', 10 * 60);
+                } catch (cacheWriteError) {
+                    console.warn('[UPLOAD-INIT-BATCH] Idempotency cache write failed:', cacheWriteError);
+                }
+            }
+            return res.status(200).json({ success: true, data: result });
+        } catch (error: any) {
+            console.error('[UPLOAD-INIT-BATCH] Error:', error);
+            const status = error.message.includes('Maximum') || error.message.includes('required') ? 400 : 500;
+            return res.status(status).json({ success: false, error: error.message });
+        }
+    }
 
     /**
      * Initialize upload

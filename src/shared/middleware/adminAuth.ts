@@ -13,7 +13,7 @@ export const requireAdmin = (
   try {
     const user = ensureAuthenticatedUser(req);
 
-    if (user.userType !== 'admin') {
+    if (!user.roles.includes('admin')) {
       res.status(403).json({
         success: false,
         error: 'Access denied. Admin privileges required.',
@@ -42,7 +42,7 @@ export const requireAdminOrCreator = (
   try {
     const user = ensureAuthenticatedUser(req);
 
-    if (user.userType !== 'admin' && user.userType !== 'creator') {
+    if (!user.roles.includes('admin') && !user.roles.includes('creator')) {
       res.status(403).json({
         success: false,
         error: 'Access denied. Admin or creator privileges required.',

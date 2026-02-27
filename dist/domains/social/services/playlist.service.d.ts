@@ -12,6 +12,7 @@ export declare class PlaylistService {
             videoId: string;
             title: string;
             thumbnail: string | null;
+            duration: any;
         }[];
         createdAt: Date;
         updatedAt: Date;

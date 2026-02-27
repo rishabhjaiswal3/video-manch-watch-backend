@@ -1,12 +1,18 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.thumbnailUrlSchema = exports.updateVideoSchema = exports.completeUploadSchema = exports.initUploadSchema = void 0;
+exports.thumbnailUrlSchema = exports.updateVideoSchema = exports.initUploadBatchSchema = exports.completeUploadSchema = exports.initUploadSchema = void 0;
 const zod_1 = require("zod");
 const ALLOWED_MIME_TYPES = [
     'video/mp4',
     'video/quicktime',
+    'video/mov',
+    'video/x-quicktime',
     'video/x-msvideo',
+    'video/avi',
     'video/x-matroska',
+    'video/matroska',
+    'video/mkv',
+    'application/x-matroska',
     'video/webm',
 ];
 const MAX_USER_SIZE = 2 * 1024 * 1024 * 1024; // 2GB
@@ -44,6 +50,12 @@ exports.initUploadSchema = zod_1.z.object({
 });
 exports.completeUploadSchema = zod_1.z.object({
     videoId: zod_1.z.string().uuid('Invalid video ID format'),
+});
+exports.initUploadBatchSchema = zod_1.z.object({
+    idempotencyKey: zod_1.z.string().min(8).max(128).optional(),
+    items: zod_1.z.array(exports.initUploadSchema.extend({
+        clientId: zod_1.z.string().min(1).max(100),
+    })).min(1, 'At least one item is required').max(25, 'Maximum 25 items allowed per batch'),
 });
 exports.updateVideoSchema = zod_1.z.object({
     title: zod_1.z.string().min(1).max(200).transform((v) => v.trim()).optional(),

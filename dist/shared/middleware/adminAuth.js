@@ -9,7 +9,7 @@ const authHelpers_js_1 = require("../utils/authHelpers.js");
 const requireAdmin = (req, res, next) => {
     try {
         const user = (0, authHelpers_js_1.ensureAuthenticatedUser)(req);
-        if (user.userType !== 'admin') {
+        if (!user.roles.includes('admin')) {
             res.status(403).json({
                 success: false,
                 error: 'Access denied. Admin privileges required.',
@@ -33,7 +33,7 @@ exports.requireAdmin = requireAdmin;
 const requireAdminOrCreator = (req, res, next) => {
     try {
         const user = (0, authHelpers_js_1.ensureAuthenticatedUser)(req);
-        if (user.userType !== 'admin' && user.userType !== 'creator') {
+        if (!user.roles.includes('admin') && !user.roles.includes('creator')) {
             res.status(403).json({
                 success: false,
                 error: 'Access denied. Admin or creator privileges required.',

@@ -4,6 +4,7 @@ export interface AuthSuccess {
         userId: string;
         email: string;
         userType: 'user' | 'creator' | 'admin';
+        roles: Array<'user' | 'creator' | 'admin'>;
     };
     accessToken: string;
     refreshToken: string;
@@ -54,6 +55,7 @@ export declare class AuthService {
             userId: string;
             email: string;
             userType: "user" | "creator" | "admin";
+            roles: ("user" | "creator" | "admin")[];
         };
     }>;
     /**
