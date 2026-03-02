@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.paginationSchema = exports.updateNotificationSchema = exports.updateCommentSchema = exports.createCommentSchema = exports.uploadAssetSchema = exports.updateProfileSchema = exports.createProfileSchema = void 0;
+exports.paginationSchema = exports.updateNotificationSchema = exports.createReelReportSchema = exports.updateCommentSchema = exports.createCommentSchema = exports.uploadAssetSchema = exports.updateProfileSchema = exports.createProfileSchema = void 0;
 const zod_1 = require("zod");
 // Profile schemas
 exports.createProfileSchema = zod_1.z.object({
@@ -67,6 +67,19 @@ exports.updateCommentSchema = zod_1.z.object({
         .min(1, 'Comment cannot be empty')
         .max(2000, 'Comment cannot exceed 2000 characters')
         .trim(),
+});
+// Reel report schema
+exports.createReelReportSchema = zod_1.z.object({
+    videoId: zod_1.z.string().min(1, 'videoId is required').trim(),
+    reason: zod_1.z.enum(['violence', 'hate', 'sexual', 'misinformation', 'spam', 'copyright', 'other'], { errorMap: () => ({ message: 'Invalid report reason' }) }),
+    details: zod_1.z
+        .string()
+        .max(2000, 'Details cannot exceed 2000 characters')
+        .trim()
+        .optional()
+        .or(zod_1.z.literal('')),
+    source: zod_1.z.enum(['reels']).default('reels'),
+    submittedAt: zod_1.z.coerce.date().optional(),
 });
 // Subscription schemas
 exports.updateNotificationSchema = zod_1.z.object({

@@ -18,6 +18,7 @@ const comment_routes_js_1 = __importDefault(require("../domains/social/comment.r
 const watchLater_routes_js_1 = __importDefault(require("../domains/social/watchLater.routes.js"));
 const playlist_routes_js_1 = __importDefault(require("../domains/social/playlist.routes.js"));
 const public_playlist_routes_js_1 = __importDefault(require("../domains/social/public-playlist.routes.js"));
+const reelReport_routes_js_1 = __importDefault(require("../domains/social/reelReport.routes.js"));
 const category_routes_js_1 = __importDefault(require("../domains/admin/category.routes.js"));
 function registerRoutes(app) {
     app.use('/auth', routes_js_1.default);
@@ -31,6 +32,7 @@ function registerRoutes(app) {
     app.use('/engagement', engagement_routes_js_1.default);
     app.use('/subscriptions', subscription_routes_js_1.default);
     app.use('/comments', comment_routes_js_1.default);
+    app.use('/reports', reelReport_routes_js_1.default);
     app.use('/watch-later', watchLater_routes_js_1.default);
     app.use('/playlists', playlist_routes_js_1.default);
     app.use('/public/playlists', public_playlist_routes_js_1.default);

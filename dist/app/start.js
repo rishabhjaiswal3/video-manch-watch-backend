@@ -67,7 +67,7 @@ const startServer = async () => {
             console.log('    MEDIA     → /upload/*, /videos/*');
             console.log('    ANALYTICS → /playback/*, /analytics/*');
             console.log('    ADMIN     → /admin/*, /config/*');
-            console.log('    SOCIAL    → /profile/*, /engagement/*, /subscriptions/*, /comments/*');
+            console.log('    SOCIAL    → /profile/*, /engagement/*, /subscriptions/*, /comments/*, /reports/*');
             console.log(`${'─'.repeat(56)}`);
             console.log('  ⚠️  Analytics Worker runs separately: npm run dev:worker');
             console.log(`${'='.repeat(56)}\n`);

@@ -91,6 +91,25 @@ export declare const updateCommentSchema: z.ZodObject<{
 }, {
     content: string;
 }>;
+export declare const createReelReportSchema: z.ZodObject<{
+    videoId: z.ZodString;
+    reason: z.ZodEnum<["violence", "hate", "sexual", "misinformation", "spam", "copyright", "other"]>;
+    details: z.ZodUnion<[z.ZodOptional<z.ZodString>, z.ZodLiteral<"">]>;
+    source: z.ZodDefault<z.ZodEnum<["reels"]>>;
+    submittedAt: z.ZodOptional<z.ZodDate>;
+}, "strip", z.ZodTypeAny, {
+    videoId: string;
+    reason: "violence" | "hate" | "sexual" | "misinformation" | "spam" | "copyright" | "other";
+    source: "reels";
+    details?: string | undefined;
+    submittedAt?: Date | undefined;
+}, {
+    videoId: string;
+    reason: "violence" | "hate" | "sexual" | "misinformation" | "spam" | "copyright" | "other";
+    source?: "reels" | undefined;
+    details?: string | undefined;
+    submittedAt?: Date | undefined;
+}>;
 export declare const updateNotificationSchema: z.ZodObject<{
     enabled: z.ZodBoolean;
 }, "strip", z.ZodTypeAny, {
@@ -113,5 +132,6 @@ export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 export type UploadAssetInput = z.infer<typeof uploadAssetSchema>;
 export type CreateCommentInput = z.infer<typeof createCommentSchema>;
 export type UpdateCommentInput = z.infer<typeof updateCommentSchema>;
+export type CreateReelReportInput = z.infer<typeof createReelReportSchema>;
 export type PaginationInput = z.infer<typeof paginationSchema>;
 //# sourceMappingURL=social.d.ts.map

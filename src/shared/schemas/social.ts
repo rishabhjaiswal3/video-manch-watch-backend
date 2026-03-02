@@ -79,6 +79,23 @@ export const updateCommentSchema = z.object({
     .trim(),
 });
 
+// Reel report schema
+export const createReelReportSchema = z.object({
+  videoId: z.string().min(1, 'videoId is required').trim(),
+  reason: z.enum(
+    ['violence', 'hate', 'sexual', 'misinformation', 'spam', 'copyright', 'other'],
+    { errorMap: () => ({ message: 'Invalid report reason' }) }
+  ),
+  details: z
+    .string()
+    .max(2000, 'Details cannot exceed 2000 characters')
+    .trim()
+    .optional()
+    .or(z.literal('')),
+  source: z.enum(['reels']).default('reels'),
+  submittedAt: z.coerce.date().optional(),
+});
+
 // Subscription schemas
 export const updateNotificationSchema = z.object({
   enabled: z.boolean(),
@@ -96,4 +113,5 @@ export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 export type UploadAssetInput = z.infer<typeof uploadAssetSchema>;
 export type CreateCommentInput = z.infer<typeof createCommentSchema>;
 export type UpdateCommentInput = z.infer<typeof updateCommentSchema>;
+export type CreateReelReportInput = z.infer<typeof createReelReportSchema>;
 export type PaginationInput = z.infer<typeof paginationSchema>;

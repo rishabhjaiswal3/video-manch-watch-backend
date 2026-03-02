@@ -1,5 +1,13 @@
 import Redis from 'ioredis';
 
+const attachRedisErrorHandler = (client: Redis, label: string): void => {
+  if (client.listenerCount('error') === 0) {
+    client.on('error', (err: Error) => {
+      console.error(`[Redis:${label}] Error:`, err.message);
+    });
+  }
+};
+
 let redisConnection: Redis | null = null;
 
 export const getRedisConnection = (): Redis => {
@@ -20,13 +28,15 @@ export const getRedisConnection = (): Redis => {
     ...(isTls && { tls: { rejectUnauthorized: false } }),
   });
 
-  redisConnection.on('connect', () => {
-    console.log('Connected to Redis');
-  });
+  attachRedisErrorHandler(redisConnection, 'main');
 
-  redisConnection.on('error', (err) => {
-    console.error('Redis error:', err);
-  });
+  // Patch .duplicate() so BullMQ's internal clones also get error handlers.
+  const originalDuplicate = redisConnection.duplicate.bind(redisConnection);
+  (redisConnection as any).duplicate = (...args: unknown[]) => {
+    const clone = (originalDuplicate as (...a: unknown[]) => Redis)(...args);
+    attachRedisErrorHandler(clone, 'duplicate');
+    return clone;
+  };
 
   return redisConnection;
 };

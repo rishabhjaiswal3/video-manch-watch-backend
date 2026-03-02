@@ -30,6 +30,9 @@ export const initializeSocket = (httpServer: HttpServer, corsOrigins: string[]):
       const pubClient = new Redis(redisUrl, redisOptions);
       const subClient = pubClient.duplicate();
 
+      pubClient.on('error', (err) => console.error('[Socket.io] Redis pub error:', err.message));
+      subClient.on('error', (err) => console.error('[Socket.io] Redis sub error:', err.message));
+
       io.adapter(createAdapter(pubClient, subClient));
       console.log('[Socket.io] Redis adapter connected');
     } catch (error) {
