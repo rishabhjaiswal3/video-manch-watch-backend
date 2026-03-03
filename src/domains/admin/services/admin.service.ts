@@ -21,7 +21,8 @@ export class AdminService {
         const query: Record<string, unknown> = {};
 
         if (params.search) {
-            query.email = { $regex: params.search, $options: 'i' };
+            const safeSearch = params.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            query.email = { $regex: safeSearch, $options: 'i' };
         }
 
         if (params.userType && ['user', 'creator', 'admin'].includes(params.userType)) {

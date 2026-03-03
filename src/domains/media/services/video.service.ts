@@ -91,7 +91,8 @@ export class VideoService {
         };
 
         if (params.search) {
-            query.title = { $regex: params.search, $options: 'i' };
+            const safeSearch = params.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            query.title = { $regex: safeSearch, $options: 'i' };
         }
 
         const [videos, total] = await Promise.all([
