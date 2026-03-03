@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+const genderSchema = z.enum(['male', 'female', 'other', 'prefer_not_to_reveal']);
+
 // Profile schemas
 export const createProfileSchema = z.object({
   username: z
@@ -13,6 +15,7 @@ export const createProfileSchema = z.object({
     .min(1, 'Display name is required')
     .max(50, 'Display name cannot exceed 50 characters')
     .trim(),
+  gender: genderSchema.optional(),
   bio: z.string().max(500, 'Bio cannot exceed 500 characters').optional(),
   location: z.string().max(100, 'Location cannot exceed 100 characters').optional(),
   links: z
@@ -33,6 +36,7 @@ export const updateProfileSchema = z.object({
     .max(50, 'Display name cannot exceed 50 characters')
     .trim()
     .optional(),
+  gender: genderSchema.optional(),
   bio: z.string().max(500, 'Bio cannot exceed 500 characters').optional(),
   location: z.string().max(100, 'Location cannot exceed 100 characters').optional(),
   links: z

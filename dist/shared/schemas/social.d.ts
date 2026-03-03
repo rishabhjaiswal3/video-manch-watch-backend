@@ -2,6 +2,7 @@ import { z } from 'zod';
 export declare const createProfileSchema: z.ZodObject<{
     username: z.ZodEffects<z.ZodString, string, string>;
     displayName: z.ZodString;
+    gender: z.ZodOptional<z.ZodEnum<["male", "female", "other", "prefer_not_to_reveal"]>>;
     bio: z.ZodOptional<z.ZodString>;
     location: z.ZodOptional<z.ZodString>;
     links: z.ZodOptional<z.ZodArray<z.ZodObject<{
@@ -17,6 +18,7 @@ export declare const createProfileSchema: z.ZodObject<{
 }, "strip", z.ZodTypeAny, {
     username: string;
     displayName: string;
+    gender?: "male" | "female" | "other" | "prefer_not_to_reveal" | undefined;
     bio?: string | undefined;
     location?: string | undefined;
     links?: {
@@ -26,6 +28,7 @@ export declare const createProfileSchema: z.ZodObject<{
 }, {
     username: string;
     displayName: string;
+    gender?: "male" | "female" | "other" | "prefer_not_to_reveal" | undefined;
     bio?: string | undefined;
     location?: string | undefined;
     links?: {
@@ -35,6 +38,7 @@ export declare const createProfileSchema: z.ZodObject<{
 }>;
 export declare const updateProfileSchema: z.ZodObject<{
     displayName: z.ZodOptional<z.ZodString>;
+    gender: z.ZodOptional<z.ZodEnum<["male", "female", "other", "prefer_not_to_reveal"]>>;
     bio: z.ZodOptional<z.ZodString>;
     location: z.ZodOptional<z.ZodString>;
     links: z.ZodOptional<z.ZodArray<z.ZodObject<{
@@ -49,6 +53,7 @@ export declare const updateProfileSchema: z.ZodObject<{
     }>, "many">>;
 }, "strip", z.ZodTypeAny, {
     displayName?: string | undefined;
+    gender?: "male" | "female" | "other" | "prefer_not_to_reveal" | undefined;
     bio?: string | undefined;
     location?: string | undefined;
     links?: {
@@ -57,6 +62,7 @@ export declare const updateProfileSchema: z.ZodObject<{
     }[] | undefined;
 }, {
     displayName?: string | undefined;
+    gender?: "male" | "female" | "other" | "prefer_not_to_reveal" | undefined;
     bio?: string | undefined;
     location?: string | undefined;
     links?: {
@@ -99,13 +105,13 @@ export declare const createReelReportSchema: z.ZodObject<{
     submittedAt: z.ZodOptional<z.ZodDate>;
 }, "strip", z.ZodTypeAny, {
     videoId: string;
-    reason: "violence" | "hate" | "sexual" | "misinformation" | "spam" | "copyright" | "other";
+    reason: "other" | "violence" | "hate" | "sexual" | "misinformation" | "spam" | "copyright";
     source: "reels";
     details?: string | undefined;
     submittedAt?: Date | undefined;
 }, {
     videoId: string;
-    reason: "violence" | "hate" | "sexual" | "misinformation" | "spam" | "copyright" | "other";
+    reason: "other" | "violence" | "hate" | "sexual" | "misinformation" | "spam" | "copyright";
     source?: "reels" | undefined;
     details?: string | undefined;
     submittedAt?: Date | undefined;

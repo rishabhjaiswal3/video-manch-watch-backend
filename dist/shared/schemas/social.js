@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.paginationSchema = exports.updateNotificationSchema = exports.createReelReportSchema = exports.updateCommentSchema = exports.createCommentSchema = exports.uploadAssetSchema = exports.updateProfileSchema = exports.createProfileSchema = void 0;
 const zod_1 = require("zod");
+const genderSchema = zod_1.z.enum(['male', 'female', 'other', 'prefer_not_to_reveal']);
 // Profile schemas
 exports.createProfileSchema = zod_1.z.object({
     username: zod_1.z
@@ -15,6 +16,7 @@ exports.createProfileSchema = zod_1.z.object({
         .min(1, 'Display name is required')
         .max(50, 'Display name cannot exceed 50 characters')
         .trim(),
+    gender: genderSchema.optional(),
     bio: zod_1.z.string().max(500, 'Bio cannot exceed 500 characters').optional(),
     location: zod_1.z.string().max(100, 'Location cannot exceed 100 characters').optional(),
     links: zod_1.z
@@ -32,6 +34,7 @@ exports.updateProfileSchema = zod_1.z.object({
         .max(50, 'Display name cannot exceed 50 characters')
         .trim()
         .optional(),
+    gender: genderSchema.optional(),
     bio: zod_1.z.string().max(500, 'Bio cannot exceed 500 characters').optional(),
     location: zod_1.z.string().max(100, 'Location cannot exceed 100 characters').optional(),
     links: zod_1.z

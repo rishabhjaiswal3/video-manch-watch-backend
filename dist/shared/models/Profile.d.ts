@@ -7,6 +7,7 @@ export interface IProfile extends Document {
     userId: string;
     username: string;
     displayName: string;
+    gender?: 'male' | 'female' | 'other' | 'prefer_not_to_reveal';
     avatar?: string;
     banner?: string;
     bio?: string;

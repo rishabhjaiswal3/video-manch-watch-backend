@@ -63,6 +63,11 @@ const ProfileSchema = new mongoose_1.Schema({
         minlength: 1,
         maxlength: 50,
     },
+    gender: {
+        type: String,
+        enum: ['male', 'female', 'other', 'prefer_not_to_reveal'],
+        default: 'prefer_not_to_reveal',
+    },
     avatar: {
         type: String,
     },

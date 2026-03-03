@@ -26,6 +26,7 @@ export declare class ProfileService {
         userId: string;
         username: string;
         displayName: string;
+        gender?: "male" | "female" | "other" | "prefer_not_to_reveal" | undefined;
         banner?: string | undefined;
         location?: string | undefined;
         isVerified: boolean;

@@ -163,6 +163,7 @@ export class ProfileService {
       userId,
       username: data.username,
       displayName: data.displayName,
+      gender: data.gender || 'prefer_not_to_reveal',
       bio: data.bio,
       location: data.location,
       links: data.links || [],
@@ -182,6 +183,7 @@ export class ProfileService {
     }
 
     if (data.displayName !== undefined) profile.displayName = data.displayName;
+    if (data.gender !== undefined) profile.gender = data.gender;
     if (data.bio !== undefined) profile.bio = data.bio;
     if (data.location !== undefined) profile.location = data.location;
     if (data.links !== undefined) profile.links = data.links;

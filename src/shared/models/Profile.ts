@@ -9,6 +9,7 @@ export interface IProfile extends Document {
   userId: string;
   username: string;
   displayName: string;
+  gender?: 'male' | 'female' | 'other' | 'prefer_not_to_reveal';
   avatar?: string;
   banner?: string;
   bio?: string;
@@ -54,6 +55,11 @@ const ProfileSchema = new Schema<IProfile>(
       trim: true,
       minlength: 1,
       maxlength: 50,
+    },
+    gender: {
+      type: String,
+      enum: ['male', 'female', 'other', 'prefer_not_to_reveal'],
+      default: 'prefer_not_to_reveal',
     },
     avatar: {
       type: String,
