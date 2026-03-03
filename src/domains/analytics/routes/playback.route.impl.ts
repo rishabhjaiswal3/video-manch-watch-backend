@@ -548,6 +548,7 @@ router.get('/stream/:videoId', async (req: Request, res: Response) => {
 router.get('/master/:videoId', async (req: Request, res: Response) => {
     try {
         const { videoId } = req.params;
+        const reqDeviceType = (req.headers['x-vm-device-type'] as string) || undefined;
         const token = req.query.token as string | undefined;
         const expires = req.query.expires as string | undefined;
         const vid = req.query.vid as string | undefined;

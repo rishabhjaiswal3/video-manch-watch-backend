@@ -3,21 +3,21 @@ export declare const signupSchema: z.ZodObject<{
     email: z.ZodEffects<z.ZodString, string, string>;
     password: z.ZodString;
 }, "strip", z.ZodTypeAny, {
-    email: string;
     password: string;
+    email: string;
 }, {
-    email: string;
     password: string;
+    email: string;
 }>;
 export declare const loginSchema: z.ZodObject<{
     email: z.ZodEffects<z.ZodString, string, string>;
     password: z.ZodString;
 }, "strip", z.ZodTypeAny, {
-    email: string;
     password: string;
+    email: string;
 }, {
-    email: string;
     password: string;
+    email: string;
 }>;
 export declare const otpLoginSchema: z.ZodObject<{
     email: z.ZodEffects<z.ZodString, string, string>;
@@ -55,13 +55,13 @@ export declare const passwordResetConfirmSchema: z.ZodObject<{
     password: z.ZodString;
     currentPassword: z.ZodOptional<z.ZodString>;
 }, "strip", z.ZodTypeAny, {
-    email: string;
     password: string;
+    email: string;
     otp: string;
     currentPassword?: string | undefined;
 }, {
-    email: string;
     password: string;
+    email: string;
     otp: string;
     currentPassword?: string | undefined;
 }>;

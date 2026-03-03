@@ -8,7 +8,11 @@ exports.verifySignedUrl = verifySignedUrl;
 exports.getSigningSecret = getSigningSecret;
 const crypto_1 = __importDefault(require("crypto"));
 // Secret key for signing URLs - must match Cloudflare Worker
-const SIGNING_SECRET = process.env.VIDEO_SIGNING_SECRET || 'your-super-secret-key-change-in-production';
+const _rawSecret = process.env.VIDEO_SIGNING_SECRET;
+if (!_rawSecret) {
+    throw new Error('[SIGNED-URL] VIDEO_SIGNING_SECRET environment variable is not set. Refusing to start.');
+}
+const SIGNING_SECRET = _rawSecret;
 // Default expiration time (1 hour)
 const DEFAULT_EXPIRY_SECONDS = 3600;
 /**
@@ -17,13 +21,10 @@ const DEFAULT_EXPIRY_SECONDS = 3600;
  */
 function generateSignedUrl(params) {
     const { videoId, path, expiresIn = DEFAULT_EXPIRY_SECONDS, deviceType } = params;
-    console.log('[SIGNED-URL] 🔐 Generating signed URL:', { videoId, path, expiresIn, deviceType });
-    console.log('[SIGNED-URL] 🔑 Using secret (first 8 chars):', SIGNING_SECRET.substring(0, 8) + '...');
     // Calculate expiration timestamp
     const expires = Math.floor(Date.now() / 1000) + expiresIn;
     // Create the string to sign: path|videoId|expires
     const dataToSign = `${path}|${videoId}|${expires}`;
-    console.log('[SIGNED-URL] 📝 Data to sign:', dataToSign);
     // Generate HMAC-SHA256 token
     const token = crypto_1.default
         .createHmac('sha256', SIGNING_SECRET)
@@ -32,9 +33,11 @@ function generateSignedUrl(params) {
     // Construct signed path with query params
     const separator = path.includes('?') ? '&' : '?';
     let signedPath = `${path}${separator}token=${token}&expires=${expires}&vid=${videoId}`;
-    // If device secret exists, append proof
+    // Optionally append a device proof so the worker can enforce native/mobile usage.
+    // This uses a separate secret (VIDEO_DEVICE_SECRET) and includes dt/dts/dproof params.
     const deviceSecret = process.env.VIDEO_DEVICE_SECRET;
     if (deviceSecret) {
+        // default to 'web' when nothing provided; proof still valid but ignored on allowed origins
         const dt = deviceType || 'web';
         const dts = Math.floor(Date.now() / 1000);
         const proofData = `${path}|${videoId}|${dt}|${dts}`;
@@ -44,8 +47,6 @@ function generateSignedUrl(params) {
             .digest('hex');
         signedPath += `&dt=${encodeURIComponent(dt)}&dts=${dts}&dproof=${dproof}`;
     }
-    console.log('[SIGNED-URL] ✅ Generated token:', token.substring(0, 16) + '...');
-    console.log('[SIGNED-URL] 🔗 Signed path:', signedPath);
     return {
         signedPath,
         token,

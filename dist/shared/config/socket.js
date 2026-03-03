@@ -24,6 +24,8 @@ const initializeSocket = (httpServer, corsOrigins) => {
             const redisOptions = isTls ? { tls: { rejectUnauthorized: false } } : {};
             const pubClient = new ioredis_1.default(redisUrl, redisOptions);
             const subClient = pubClient.duplicate();
+            pubClient.on('error', (err) => console.error('[Socket.io] Redis pub error:', err.message));
+            subClient.on('error', (err) => console.error('[Socket.io] Redis sub error:', err.message));
             io.adapter((0, redis_adapter_1.createAdapter)(pubClient, subClient));
             console.log('[Socket.io] Redis adapter connected');
         }
@@ -33,23 +35,21 @@ const initializeSocket = (httpServer, corsOrigins) => {
     }
     // Handle connections
     io.on('connection', (socket) => {
-        console.log(`[Socket.io] Client connected: ${socket.id}`);
         // Join a video room (for real-time comments)
         socket.on('join:video', (data) => {
-            const room = `video:${data.videoId}`;
-            socket.join(room);
-            console.log(`[Socket.io] ${socket.id} joined room: ${room}`);
+            const videoId = typeof data?.videoId === 'string' ? data.videoId.slice(0, 128) : null;
+            if (!videoId || !/^[a-zA-Z0-9_-]+$/.test(videoId))
+                return;
+            socket.join(`video:${videoId}`);
         });
         // Leave a video room
         socket.on('leave:video', (data) => {
-            const room = `video:${data.videoId}`;
-            socket.leave(room);
-            console.log(`[Socket.io] ${socket.id} left room: ${room}`);
+            const videoId = typeof data?.videoId === 'string' ? data.videoId.slice(0, 128) : null;
+            if (!videoId || !/^[a-zA-Z0-9_-]+$/.test(videoId))
+                return;
+            socket.leave(`video:${videoId}`);
         });
-        // Handle disconnection
-        socket.on('disconnect', (reason) => {
-            console.log(`[Socket.io] Client disconnected: ${socket.id}, reason: ${reason}`);
-        });
+        socket.on('disconnect', () => { });
     });
     console.log('[Socket.io] Server initialized');
     return io;

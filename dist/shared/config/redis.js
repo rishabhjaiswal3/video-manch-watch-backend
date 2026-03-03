@@ -5,6 +5,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.disconnectRedis = exports.getRedisConnection = void 0;
 const ioredis_1 = __importDefault(require("ioredis"));
+const attachRedisErrorHandler = (client, label) => {
+    if (client.listenerCount('error') === 0) {
+        client.on('error', (err) => {
+            console.error(`[Redis:${label}] Error:`, err.message);
+        });
+    }
+};
 let redisConnection = null;
 const getRedisConnection = () => {
     if (redisConnection) {
@@ -19,12 +26,14 @@ const getRedisConnection = () => {
         maxRetriesPerRequest: null,
         ...(isTls && { tls: { rejectUnauthorized: false } }),
     });
-    redisConnection.on('connect', () => {
-        console.log('Connected to Redis');
-    });
-    redisConnection.on('error', (err) => {
-        console.error('Redis error:', err);
-    });
+    attachRedisErrorHandler(redisConnection, 'main');
+    // Patch .duplicate() so BullMQ's internal clones also get error handlers.
+    const originalDuplicate = redisConnection.duplicate.bind(redisConnection);
+    redisConnection.duplicate = (...args) => {
+        const clone = originalDuplicate(...args);
+        attachRedisErrorHandler(clone, 'duplicate');
+        return clone;
+    };
     return redisConnection;
 };
 exports.getRedisConnection = getRedisConnection;

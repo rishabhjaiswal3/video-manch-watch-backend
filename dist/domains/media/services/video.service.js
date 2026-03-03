@@ -70,7 +70,8 @@ class VideoService {
             contentType: { $ne: 'reel' }, // Exclude reels from main feed
         };
         if (params.search) {
-            query.title = { $regex: params.search, $options: 'i' };
+            const safeSearch = params.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            query.title = { $regex: safeSearch, $options: 'i' };
         }
         const [videos, total] = await Promise.all([
             Video_js_1.Video.find(query)
@@ -119,6 +120,7 @@ class VideoService {
             const { signedPath } = (0, signedUrl_js_1.generateSignedUrl)({
                 videoId: video.videoId,
                 path: video.masterPlaylistUrl,
+                deviceType: 'web',
             });
             videoObj.hlsUrl = signedPath;
         }
@@ -148,6 +150,7 @@ class VideoService {
                 const { signedPath } = (0, signedUrl_js_1.generateSignedUrl)({
                     videoId: v.videoId,
                     path: v.masterPlaylistUrl,
+                    deviceType: 'web',
                 });
                 videoObj.hlsUrl = signedPath;
             }
