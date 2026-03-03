@@ -14,6 +14,8 @@ export interface SignedUrlParams {
   videoId: string;
   path: string;
   expiresIn?: number; // seconds
+  /** optional hint about client type ("ios", "android", "web", etc.) */
+  deviceType?: string;
 }
 
 export interface SignedUrlResult {
@@ -27,7 +29,7 @@ export interface SignedUrlResult {
  * Token = HMAC-SHA256(path + expires, secret)
  */
 export function generateSignedUrl(params: SignedUrlParams): SignedUrlResult {
-  const { videoId, path, expiresIn = DEFAULT_EXPIRY_SECONDS } = params;
+  const { videoId, path, expiresIn = DEFAULT_EXPIRY_SECONDS, deviceType } = params;
 
   // Calculate expiration timestamp
   const expires = Math.floor(Date.now() / 1000) + expiresIn;
@@ -43,7 +45,22 @@ export function generateSignedUrl(params: SignedUrlParams): SignedUrlResult {
 
   // Construct signed path with query params
   const separator = path.includes('?') ? '&' : '?';
-  const signedPath = `${path}${separator}token=${token}&expires=${expires}&vid=${videoId}`;
+  let signedPath = `${path}${separator}token=${token}&expires=${expires}&vid=${videoId}`;
+
+  // Optionally append a device proof so the worker can enforce native/mobile usage.
+  // This uses a separate secret (VIDEO_DEVICE_SECRET) and includes dt/dts/dproof params.
+  const deviceSecret = process.env.VIDEO_DEVICE_SECRET;
+  if (deviceSecret) {
+    // default to 'web' when nothing provided; proof still valid but ignored on allowed origins
+    const dt = deviceType || 'web';
+    const dts = Math.floor(Date.now() / 1000);
+    const proofData = `${path}|${videoId}|${dt}|${dts}`;
+    const dproof = crypto
+      .createHmac('sha256', deviceSecret)
+      .update(proofData)
+      .digest('hex');
+    signedPath += `&dt=${encodeURIComponent(dt)}&dts=${dts}&dproof=${dproof}`;
+  }
 
   return {
     signedPath,

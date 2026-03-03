@@ -493,10 +493,14 @@ router.get('/stream/:videoId', async (req: Request, res: Response) => {
             });
         }
 
+        // include deviceType header when available so mobile clients
+        // receive a signed URL they can use directly with the segment worker
+        const reqDeviceType = (req.headers['x-vm-device-type'] as string) || undefined;
         const signedMaster = generateSignedUrl({
             videoId,
             path: masterPlaylistPath,  // Use actual R2 path from database
             expiresIn: TOKEN_EXPIRY_SECONDS,
+            deviceType: reqDeviceType,
         });
 
         const signedOutputs = (video.outputs || []).map(output => {
@@ -506,6 +510,7 @@ router.get('/stream/:videoId', async (req: Request, res: Response) => {
                 videoId,
                 path: normalizePath(output.playlistUrl),
                 expiresIn: TOKEN_EXPIRY_SECONDS,
+                deviceType: reqDeviceType,
             });
 
             return {
@@ -602,6 +607,7 @@ router.get('/master/:videoId', async (req: Request, res: Response) => {
                     videoId,
                     path: variantKey,
                     expiresIn: TOKEN_EXPIRY_SECONDS,
+                    deviceType: reqDeviceType,
                 });
 
                 return `${SEGMENT_BASE_URL}/${signed.signedPath}`;

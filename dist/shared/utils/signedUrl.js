@@ -16,8 +16,8 @@ const DEFAULT_EXPIRY_SECONDS = 3600;
  * Token = HMAC-SHA256(path + expires, secret)
  */
 function generateSignedUrl(params) {
-    const { videoId, path, expiresIn = DEFAULT_EXPIRY_SECONDS } = params;
-    console.log('[SIGNED-URL] 🔐 Generating signed URL:', { videoId, path, expiresIn });
+    const { videoId, path, expiresIn = DEFAULT_EXPIRY_SECONDS, deviceType } = params;
+    console.log('[SIGNED-URL] 🔐 Generating signed URL:', { videoId, path, expiresIn, deviceType });
     console.log('[SIGNED-URL] 🔑 Using secret (first 8 chars):', SIGNING_SECRET.substring(0, 8) + '...');
     // Calculate expiration timestamp
     const expires = Math.floor(Date.now() / 1000) + expiresIn;
@@ -31,7 +31,19 @@ function generateSignedUrl(params) {
         .digest('hex');
     // Construct signed path with query params
     const separator = path.includes('?') ? '&' : '?';
-    const signedPath = `${path}${separator}token=${token}&expires=${expires}&vid=${videoId}`;
+    let signedPath = `${path}${separator}token=${token}&expires=${expires}&vid=${videoId}`;
+    // If device secret exists, append proof
+    const deviceSecret = process.env.VIDEO_DEVICE_SECRET;
+    if (deviceSecret) {
+        const dt = deviceType || 'web';
+        const dts = Math.floor(Date.now() / 1000);
+        const proofData = `${path}|${videoId}|${dt}|${dts}`;
+        const dproof = crypto_1.default
+            .createHmac('sha256', deviceSecret)
+            .update(proofData)
+            .digest('hex');
+        signedPath += `&dt=${encodeURIComponent(dt)}&dts=${dts}&dproof=${dproof}`;
+    }
     console.log('[SIGNED-URL] ✅ Generated token:', token.substring(0, 16) + '...');
     console.log('[SIGNED-URL] 🔗 Signed path:', signedPath);
     return {

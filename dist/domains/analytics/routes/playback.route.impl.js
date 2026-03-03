@@ -453,10 +453,12 @@ router.get('/stream/:videoId', async (req, res) => {
                 error: 'Video has no playlist',
             });
         }
+        const reqDeviceType = req.headers['x-vm-device-type'];
         const signedMaster = (0, signedUrl_js_1.generateSignedUrl)({
             videoId,
             path: masterPlaylistPath, // Use actual R2 path from database
             expiresIn: TOKEN_EXPIRY_SECONDS,
+            deviceType: typeof reqDeviceType === 'string' ? reqDeviceType : undefined,
         });
         const signedOutputs = (video.outputs || []).map(output => {
             if (!output.playlistUrl)
@@ -465,6 +467,7 @@ router.get('/stream/:videoId', async (req, res) => {
                 videoId,
                 path: normalizePath(output.playlistUrl),
                 expiresIn: TOKEN_EXPIRY_SECONDS,
+                deviceType: typeof reqDeviceType === 'string' ? reqDeviceType : undefined,
             });
             return {
                 quality: output.quality,
@@ -519,6 +522,8 @@ router.get('/master/:videoId', async (req, res) => {
         }
         const masterKey = normalizePath(video.masterPlaylistUrl);
         const baseDir = masterKey.substring(0, masterKey.lastIndexOf('/') + 1);
+        // propagate device type for proof generation if present
+        const reqDeviceType = req.headers['x-vm-device-type'];
         const downloadUrl = await r2Service_js_1.r2Service.getDownloadPresignedUrl(r2_js_1.R2_BUCKETS.TRANSCODED, masterKey, 60);
         const response = await fetch(downloadUrl);
         if (!response.ok) {
@@ -548,6 +553,7 @@ router.get('/master/:videoId', async (req, res) => {
                 videoId,
                 path: variantKey,
                 expiresIn: TOKEN_EXPIRY_SECONDS,
+                deviceType: typeof reqDeviceType === 'string' ? reqDeviceType : undefined,
             });
             return `${SEGMENT_BASE_URL}/${signed.signedPath}`;
         })

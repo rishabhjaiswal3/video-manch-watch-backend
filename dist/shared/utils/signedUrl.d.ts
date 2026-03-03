@@ -2,6 +2,8 @@ export interface SignedUrlParams {
     videoId: string;
     path: string;
     expiresIn?: number;
+    /** Optional device type string; used to generate proof for mobile playback */
+    deviceType?: string;
 }
 export interface SignedUrlResult {
     signedPath: string;

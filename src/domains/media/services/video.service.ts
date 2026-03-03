@@ -148,6 +148,7 @@ export class VideoService {
             const { signedPath } = generateSignedUrl({
                 videoId: video.videoId,
                 path: video.masterPlaylistUrl,
+                deviceType: 'web',
             });
             videoObj.hlsUrl = signedPath;
         }
@@ -183,6 +184,7 @@ export class VideoService {
                 const { signedPath } = generateSignedUrl({
                     videoId: v.videoId,
                     path: v.masterPlaylistUrl,
+                    deviceType: 'web',
                 });
                 videoObj.hlsUrl = signedPath;
             }
