@@ -1,5 +1,8 @@
 import { Request, Response } from 'express';
 export declare class AuthController {
+    private getCookieBaseOptions;
+    private setAuthCookies;
+    private clearAuthCookies;
     private handleRoleLoginFlow;
     signup(req: Request, res: Response): Promise<Response<any, Record<string, any>>>;
     login(req: Request, res: Response): Promise<Response<any, Record<string, any>>>;

@@ -5,7 +5,6 @@ const auth_controller_js_1 = require("./controllers/auth.controller.js");
 const validate_js_1 = require("../../shared/middleware/validate.js");
 const auth_js_1 = require("../../shared/schemas/auth.js");
 const rateLimiter_js_1 = require("../../shared/middleware/rateLimiter.js");
-const auth_js_2 = require("../../shared/middleware/auth.js");
 const router = (0, express_1.Router)();
 const authController = new auth_controller_js_1.AuthController();
 // Apply stricter rate limiting to all auth routes
@@ -25,6 +24,6 @@ router.post('/refresh', (0, validate_js_1.validate)(auth_js_1.refreshTokenSchema
 /**
  * Protected Routes
  */
-router.post('/logout', auth_js_2.authenticate, (req, res) => authController.logout(req, res));
+router.post('/logout', (req, res) => authController.logout(req, res));
 exports.default = router;
 //# sourceMappingURL=routes.js.map

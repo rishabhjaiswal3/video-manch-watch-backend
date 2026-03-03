@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import type { AuthenticatedUser } from '../types/requests.js';
+import { getCookieValue } from '../utils/cookies.js';
 
 interface TokenPayload {
   userId: string;
@@ -15,21 +16,16 @@ export const authenticate = (
   next: NextFunction
 ): void => {
   const authHeader = req.headers.authorization;
-
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    res.status(401).json({
-      success: false,
-      error: 'Access denied. No token provided.',
-    });
-    return;
-  }
-
-  const token = authHeader.split(' ')[1];
+  const bearerToken = authHeader?.startsWith('Bearer ')
+    ? authHeader.split(' ')[1]
+    : undefined;
+  const cookieToken = getCookieValue(req, 'videomanch_access_token');
+  const token = bearerToken || cookieToken;
 
   if (!token) {
     res.status(401).json({
       success: false,
-      error: 'Access denied. Malformed authorization header.',
+      error: 'Access denied. No token provided.',
     });
     return;
   }

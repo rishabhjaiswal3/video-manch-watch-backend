@@ -10,7 +10,6 @@ import {
   refreshTokenSchema,
 } from '../../shared/schemas/auth.js';
 import { authLimiter, otpVerifyLimiter } from '../../shared/middleware/rateLimiter.js';
-import { authenticate } from '../../shared/middleware/auth.js';
 
 const router = Router();
 const authController = new AuthController();
@@ -42,6 +41,6 @@ router.post('/refresh', validate(refreshTokenSchema), (req, res) => authControll
 /**
  * Protected Routes
  */
-router.post('/logout', authenticate, (req, res) => authController.logout(req, res));
+router.post('/logout', (req, res) => authController.logout(req, res));
 
 export default router;

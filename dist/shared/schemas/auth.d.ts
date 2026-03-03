@@ -66,11 +66,11 @@ export declare const passwordResetConfirmSchema: z.ZodObject<{
     currentPassword?: string | undefined;
 }>;
 export declare const refreshTokenSchema: z.ZodObject<{
-    refreshToken: z.ZodString;
+    refreshToken: z.ZodOptional<z.ZodString>;
 }, "strip", z.ZodTypeAny, {
-    refreshToken: string;
+    refreshToken?: string | undefined;
 }, {
-    refreshToken: string;
+    refreshToken?: string | undefined;
 }>;
 export declare const logoutSchema: z.ZodObject<{
     refreshToken: z.ZodOptional<z.ZodString>;

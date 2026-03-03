@@ -52,7 +52,7 @@ exports.passwordResetConfirmSchema = zod_1.z.object({
     currentPassword: zod_1.z.string().min(1, 'Current password is required').optional(),
 });
 exports.refreshTokenSchema = zod_1.z.object({
-    refreshToken: zod_1.z.string().min(1, 'Refresh token is required'),
+    refreshToken: zod_1.z.string().min(1, 'Refresh token is required').optional(),
 });
 exports.logoutSchema = zod_1.z.object({
     refreshToken: zod_1.z.string().optional(),
