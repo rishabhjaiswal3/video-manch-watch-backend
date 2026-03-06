@@ -88,6 +88,15 @@ class AdminService {
      * Get platform statistics
      */
     async getStats() {
+        const safeQueueStats = async (userType) => {
+            try {
+                return await queueService_js_1.queueService.getQueueStats(userType);
+            }
+            catch (error) {
+                console.warn(`[ADMIN] Queue stats unavailable for ${userType}: ${error?.message || 'unknown error'}`);
+                return { waiting: 0, active: 0, completed: 0, failed: 0 };
+            }
+        };
         const [userCounts, recentUsers, videoStatusCounts, transcodingPerformance, storageStats, activeViewers, playbackTotals, userQueueStats, creatorQueueStats,] = await Promise.all([
             User_js_1.User.aggregate([{ $group: { _id: '$userType', count: { $sum: 1 } } }]),
             User_js_1.User.find()
@@ -132,8 +141,8 @@ class AdminService {
                     },
                 },
             ]),
-            queueService_js_1.queueService.getQueueStats('user'),
-            queueService_js_1.queueService.getQueueStats('creator'),
+            safeQueueStats('user'),
+            safeQueueStats('creator'),
         ]);
         const stats = {
             totalUsers: 0,

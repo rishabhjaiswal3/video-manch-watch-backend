@@ -40,12 +40,13 @@ class AuthController {
                 ? 'strict'
                 : 'lax';
         const configuredDomain = process.env.AUTH_COOKIE_DOMAIN?.trim();
+        const useCookieDomain = Boolean(configuredDomain && (isProd || configuredDomain.includes('localhost')));
         return {
             httpOnly: true,
             secure: isProd || sameSite === 'none',
             sameSite,
             path: '/',
-            ...(configuredDomain ? { domain: configuredDomain } : {}),
+            ...(useCookieDomain ? { domain: configuredDomain } : {}),
         };
     }
     setAuthCookies(res, auth) {

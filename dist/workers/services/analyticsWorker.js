@@ -23,6 +23,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.pushEventsToRedis = pushEventsToRedis;
 exports.updateActiveSession = updateActiveSession;
 exports.removeActiveSession = removeActiveSession;
+exports.processEventsInline = processEventsInline;
 exports.startAnalyticsWorker = startAnalyticsWorker;
 exports.stopAnalyticsWorker = stopAnalyticsWorker;
 const redis_js_1 = require("../../shared/config/redis.js");
@@ -427,6 +428,15 @@ async function aggregateAndWrite(events) {
     // Wait for all writes to complete
     await Promise.allSettled(writePromises);
 }
+/**
+ * Fallback processing path when Redis queueing is unavailable.
+ * This keeps creator/admin analytics usable in degraded mode.
+ */
+async function processEventsInline(events) {
+    if (!events.length)
+        return;
+    await aggregateAndWrite(events);
+}
 // ─── Worker Lifecycle ───────────────────────────────────
 let workerTimer = null;
 /**
@@ -470,6 +480,7 @@ async function stopAnalyticsWorker() {
 }
 exports.default = {
     pushEventsToRedis,
+    processEventsInline,
     updateActiveSession,
     removeActiveSession,
     startAnalyticsWorker,

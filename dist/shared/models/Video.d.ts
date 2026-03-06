@@ -67,6 +67,11 @@ export interface IVideo extends Document {
     duration?: number;
     tags?: string[];
     genres?: string[];
+    isLive?: boolean;
+    liveStatus?: 'scheduled' | 'live' | 'ended';
+    liveStartedAt?: Date;
+    liveEndedAt?: Date;
+    streamKey?: string;
     contentType?: 'vod' | 'live' | 'reel';
     isAdultContent?: boolean;
     isDownloadable?: boolean;

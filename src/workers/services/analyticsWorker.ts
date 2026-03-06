@@ -519,6 +519,15 @@ async function aggregateAndWrite(events: PlaybackEvent[]): Promise<void> {
     await Promise.allSettled(writePromises);
 }
 
+/**
+ * Fallback processing path when Redis queueing is unavailable.
+ * This keeps creator/admin analytics usable in degraded mode.
+ */
+export async function processEventsInline(events: PlaybackEvent[]): Promise<void> {
+    if (!events.length) return;
+    await aggregateAndWrite(events);
+}
+
 // ─── Worker Lifecycle ───────────────────────────────────
 
 let workerTimer: ReturnType<typeof setInterval> | null = null;
@@ -569,6 +578,7 @@ export async function stopAnalyticsWorker(): Promise<void> {
 
 export default {
     pushEventsToRedis,
+    processEventsInline,
     updateActiveSession,
     removeActiveSession,
     startAnalyticsWorker,

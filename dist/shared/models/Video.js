@@ -147,6 +147,16 @@ const VideoSchema = new mongoose_1.Schema({
         enum: ['vod', 'live', 'reel'],
         default: 'vod',
     },
+    isLive: { type: Boolean, default: false, index: true },
+    liveStatus: {
+        type: String,
+        enum: ['scheduled', 'live', 'ended'],
+        default: 'ended',
+        index: true,
+    },
+    liveStartedAt: { type: Date },
+    liveEndedAt: { type: Date },
+    streamKey: { type: String },
     isAdultContent: { type: Boolean, default: false },
     isDownloadable: { type: Boolean, default: false },
     showTitle: { type: Boolean, default: true },
@@ -182,5 +192,6 @@ VideoSchema.index({ tags: 1 });
 VideoSchema.index({ genres: 1 });
 VideoSchema.index({ createdAt: -1 });
 VideoSchema.index({ userId: 1, visibility: 1 });
+VideoSchema.index({ isLive: 1, liveStatus: 1, createdAt: -1 });
 exports.Video = mongoose_1.default.model('Video', VideoSchema);
 //# sourceMappingURL=Video.js.map

@@ -12,6 +12,7 @@ interface RegisterVODInput {
     sourceStreamId?: string;
 }
 export declare class VideoService {
+    private getAnalyticsMap;
     private getProfileMap;
     private enrichVideoWithChannel;
     /**

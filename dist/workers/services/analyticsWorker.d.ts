@@ -57,6 +57,11 @@ export declare function updateActiveSession(event: PlaybackEvent): Promise<void>
  */
 export declare function removeActiveSession(sessionId: string): Promise<void>;
 /**
+ * Fallback processing path when Redis queueing is unavailable.
+ * This keeps creator/admin analytics usable in degraded mode.
+ */
+export declare function processEventsInline(events: PlaybackEvent[]): Promise<void>;
+/**
  * Start the analytics worker.
  * Call this once from your server's startup (index.ts).
  */
@@ -68,6 +73,7 @@ export declare function startAnalyticsWorker(): void;
 export declare function stopAnalyticsWorker(): Promise<void>;
 declare const _default: {
     pushEventsToRedis: typeof pushEventsToRedis;
+    processEventsInline: typeof processEventsInline;
     updateActiveSession: typeof updateActiveSession;
     removeActiveSession: typeof removeActiveSession;
     startAnalyticsWorker: typeof startAnalyticsWorker;

@@ -16,6 +16,7 @@ import playlistRoutes from '../domains/social/playlist.routes.js';
 import publicPlaylistRoutes from '../domains/social/public-playlist.routes.js';
 import reelReportRoutes from '../domains/social/reelReport.routes.js';
 import categoryRoutes from '../domains/admin/category.routes.js';
+import liveRoutes from '../domains/live/routes.js';
 
 export function registerRoutes(app: Express): void {
   app.use('/auth', authRoutes);
@@ -34,4 +35,5 @@ export function registerRoutes(app: Express): void {
   app.use('/playlists', playlistRoutes);
   app.use('/public/playlists', publicPlaylistRoutes);
   app.use('/categories', categoryRoutes);
+  app.use('/live', liveRoutes);
 }

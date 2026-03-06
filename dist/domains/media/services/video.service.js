@@ -3,9 +3,56 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.VideoService = void 0;
 const Video_js_1 = require("../../../shared/models/Video.js");
 const Profile_js_1 = require("../../../shared/models/Profile.js");
+const VideoAnalytics_js_1 = require("../../../shared/models/VideoAnalytics.js");
 const signedUrl_js_1 = require("../../../shared/utils/signedUrl.js");
 const uuid_1 = require("uuid");
 class VideoService {
+    async getAnalyticsMap(videoIds) {
+        const uniqueVideoIds = Array.from(new Set(videoIds.filter(Boolean)));
+        if (uniqueVideoIds.length === 0)
+            return new Map();
+        const [historical, live] = await Promise.all([
+            VideoAnalytics_js_1.VideoAnalytics.aggregate([
+                { $match: { videoId: { $in: uniqueVideoIds } } },
+                {
+                    $group: {
+                        _id: '$videoId',
+                        totalViews: { $sum: '$views' },
+                        totalWatchTime: { $sum: '$totalWatchTime' },
+                    },
+                },
+            ]),
+            VideoAnalytics_js_1.ActiveSession.aggregate([
+                { $match: { videoId: { $in: uniqueVideoIds } } },
+                {
+                    $group: {
+                        _id: '$videoId',
+                        currentViewers: { $sum: 1 },
+                    },
+                },
+            ]),
+        ]);
+        const map = new Map();
+        uniqueVideoIds.forEach((id) => {
+            map.set(id, { totalViews: 0, totalWatchTime: 0, currentViewers: 0 });
+        });
+        for (const row of historical) {
+            const existing = map.get(row._id) || { totalViews: 0, totalWatchTime: 0, currentViewers: 0 };
+            map.set(row._id, {
+                ...existing,
+                totalViews: Number(row.totalViews || 0),
+                totalWatchTime: Number(row.totalWatchTime || 0),
+            });
+        }
+        for (const row of live) {
+            const existing = map.get(row._id) || { totalViews: 0, totalWatchTime: 0, currentViewers: 0 };
+            map.set(row._id, {
+                ...existing,
+                currentViewers: Number(row.currentViewers || 0),
+            });
+        }
+        return map;
+    }
     async getProfileMap(userIds) {
         const uniqueUserIds = Array.from(new Set(userIds.filter(Boolean)));
         if (uniqueUserIds.length === 0)
@@ -15,15 +62,19 @@ class VideoService {
             .lean();
         return new Map(profiles.map((profile) => [profile.userId, profile]));
     }
-    enrichVideoWithChannel(video, profileMap) {
+    enrichVideoWithChannel(video, profileMap, analyticsMap) {
         const profile = profileMap.get(video.userId);
         const channelName = profile?.displayName || profile?.username || 'Unknown user';
+        const analytics = analyticsMap?.get(video.videoId) || { totalViews: 0, totalWatchTime: 0, currentViewers: 0 };
         return {
             ...video,
             channel: channelName,
             channelAvatar: profile?.avatar || '',
             channelUsername: profile?.username || '',
             channelVerified: Boolean(profile?.isVerified),
+            totalViews: analytics.totalViews,
+            totalWatchTime: analytics.totalWatchTime,
+            currentViewers: analytics.currentViewers,
         };
     }
     /**
@@ -81,7 +132,10 @@ class VideoService {
                 .lean(),
             Video_js_1.Video.countDocuments(query),
         ]);
-        const profileMap = await this.getProfileMap(videos.map((v) => v.userId));
+        const [profileMap, analyticsMap] = await Promise.all([
+            this.getProfileMap(videos.map((v) => v.userId)),
+            this.getAnalyticsMap(videos.map((v) => v.videoId)),
+        ]);
         // Sign URLs for playback + attach channel info
         const signedVideos = videos.map(v => {
             const videoObj = { ...v };
@@ -94,7 +148,7 @@ class VideoService {
                 });
                 videoObj.hlsUrl = signedPath;
             }
-            return this.enrichVideoWithChannel(videoObj, profileMap);
+            return this.enrichVideoWithChannel(videoObj, profileMap, analyticsMap);
         });
         return {
             videos: signedVideos,
@@ -115,7 +169,10 @@ class VideoService {
         if (!video || video.status !== 'completed')
             return null;
         const videoObj = { ...video };
-        const profileMap = await this.getProfileMap([video.userId]);
+        const [profileMap, analyticsMap] = await Promise.all([
+            this.getProfileMap([video.userId]),
+            this.getAnalyticsMap([video.videoId]),
+        ]);
         if (video.masterPlaylistUrl) {
             const { signedPath } = (0, signedUrl_js_1.generateSignedUrl)({
                 videoId: video.videoId,
@@ -124,7 +181,7 @@ class VideoService {
             });
             videoObj.hlsUrl = signedPath;
         }
-        return this.enrichVideoWithChannel(videoObj, profileMap);
+        return this.enrichVideoWithChannel(videoObj, profileMap, analyticsMap);
     }
     /**
      * List Reels (vertical short videos)
@@ -143,7 +200,10 @@ class VideoService {
                 .lean(),
             Video_js_1.Video.countDocuments(query),
         ]);
-        const profileMap = await this.getProfileMap(videos.map((v) => v.userId));
+        const [profileMap, analyticsMap] = await Promise.all([
+            this.getProfileMap(videos.map((v) => v.userId)),
+            this.getAnalyticsMap(videos.map((v) => v.videoId)),
+        ]);
         const signedVideos = videos.map(v => {
             const videoObj = { ...v };
             if (v.masterPlaylistUrl) {
@@ -154,7 +214,7 @@ class VideoService {
                 });
                 videoObj.hlsUrl = signedPath;
             }
-            const enriched = this.enrichVideoWithChannel(videoObj, profileMap);
+            const enriched = this.enrichVideoWithChannel(videoObj, profileMap, analyticsMap);
             return {
                 ...enriched,
                 username: enriched.channel,

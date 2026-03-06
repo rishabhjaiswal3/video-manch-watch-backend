@@ -1,5 +1,6 @@
 import { Video } from '../../../shared/models/Video.js';
 import { Profile } from '../../../shared/models/Profile.js';
+import { ActiveSession, VideoAnalytics } from '../../../shared/models/VideoAnalytics.js';
 import { generateSignedUrl } from '../../../shared/utils/signedUrl.js';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -18,6 +19,57 @@ interface RegisterVODInput {
 }
 
 export class VideoService {
+    private async getAnalyticsMap(videoIds: string[]): Promise<Map<string, { totalViews: number; totalWatchTime: number; currentViewers: number }>> {
+        const uniqueVideoIds = Array.from(new Set(videoIds.filter(Boolean)));
+        if (uniqueVideoIds.length === 0) return new Map();
+
+        const [historical, live] = await Promise.all([
+            VideoAnalytics.aggregate([
+                { $match: { videoId: { $in: uniqueVideoIds } } },
+                {
+                    $group: {
+                        _id: '$videoId',
+                        totalViews: { $sum: '$views' },
+                        totalWatchTime: { $sum: '$totalWatchTime' },
+                    },
+                },
+            ]),
+            ActiveSession.aggregate([
+                { $match: { videoId: { $in: uniqueVideoIds } } },
+                {
+                    $group: {
+                        _id: '$videoId',
+                        currentViewers: { $sum: 1 },
+                    },
+                },
+            ]),
+        ]);
+
+        const map = new Map<string, { totalViews: number; totalWatchTime: number; currentViewers: number }>();
+        uniqueVideoIds.forEach((id) => {
+            map.set(id, { totalViews: 0, totalWatchTime: 0, currentViewers: 0 });
+        });
+
+        for (const row of historical) {
+            const existing = map.get(row._id) || { totalViews: 0, totalWatchTime: 0, currentViewers: 0 };
+            map.set(row._id, {
+                ...existing,
+                totalViews: Number(row.totalViews || 0),
+                totalWatchTime: Number(row.totalWatchTime || 0),
+            });
+        }
+
+        for (const row of live) {
+            const existing = map.get(row._id) || { totalViews: 0, totalWatchTime: 0, currentViewers: 0 };
+            map.set(row._id, {
+                ...existing,
+                currentViewers: Number(row.currentViewers || 0),
+            });
+        }
+
+        return map;
+    }
+
     private async getProfileMap(userIds: string[]): Promise<Map<string, any>> {
         const uniqueUserIds = Array.from(new Set(userIds.filter(Boolean)));
         if (uniqueUserIds.length === 0) return new Map();
@@ -29,9 +81,14 @@ export class VideoService {
         return new Map(profiles.map((profile: any) => [profile.userId, profile]));
     }
 
-    private enrichVideoWithChannel(video: any, profileMap: Map<string, any>) {
+    private enrichVideoWithChannel(
+        video: any,
+        profileMap: Map<string, any>,
+        analyticsMap?: Map<string, { totalViews: number; totalWatchTime: number; currentViewers: number }>
+    ) {
         const profile = profileMap.get(video.userId);
         const channelName = profile?.displayName || profile?.username || 'Unknown user';
+        const analytics = analyticsMap?.get(video.videoId) || { totalViews: 0, totalWatchTime: 0, currentViewers: 0 };
 
         return {
             ...video,
@@ -39,6 +96,9 @@ export class VideoService {
             channelAvatar: profile?.avatar || '',
             channelUsername: profile?.username || '',
             channelVerified: Boolean(profile?.isVerified),
+            totalViews: analytics.totalViews,
+            totalWatchTime: analytics.totalWatchTime,
+            currentViewers: analytics.currentViewers,
         };
     }
 
@@ -104,7 +164,10 @@ export class VideoService {
             Video.countDocuments(query),
         ]);
 
-        const profileMap = await this.getProfileMap(videos.map((v: any) => v.userId));
+        const [profileMap, analyticsMap] = await Promise.all([
+            this.getProfileMap(videos.map((v: any) => v.userId)),
+            this.getAnalyticsMap(videos.map((v: any) => v.videoId)),
+        ]);
 
         // Sign URLs for playback + attach channel info
         const signedVideos = videos.map(v => {
@@ -118,7 +181,7 @@ export class VideoService {
                 });
                 videoObj.hlsUrl = signedPath;
             }
-            return this.enrichVideoWithChannel(videoObj, profileMap);
+            return this.enrichVideoWithChannel(videoObj, profileMap, analyticsMap);
         });
 
         return {
@@ -142,7 +205,10 @@ export class VideoService {
         if (!video || video.status !== 'completed') return null;
 
         const videoObj = { ...video } as any;
-        const profileMap = await this.getProfileMap([video.userId]);
+        const [profileMap, analyticsMap] = await Promise.all([
+            this.getProfileMap([video.userId]),
+            this.getAnalyticsMap([video.videoId]),
+        ]);
 
         if (video.masterPlaylistUrl) {
             const { signedPath } = generateSignedUrl({
@@ -153,7 +219,7 @@ export class VideoService {
             videoObj.hlsUrl = signedPath;
         }
 
-        return this.enrichVideoWithChannel(videoObj, profileMap);
+        return this.enrichVideoWithChannel(videoObj, profileMap, analyticsMap);
     }
 
     /**
@@ -176,7 +242,10 @@ export class VideoService {
             Video.countDocuments(query),
         ]);
 
-        const profileMap = await this.getProfileMap(videos.map((v: any) => v.userId));
+        const [profileMap, analyticsMap] = await Promise.all([
+            this.getProfileMap(videos.map((v: any) => v.userId)),
+            this.getAnalyticsMap(videos.map((v: any) => v.videoId)),
+        ]);
 
         const signedVideos = videos.map(v => {
             const videoObj = { ...v } as any;
@@ -188,7 +257,7 @@ export class VideoService {
                 });
                 videoObj.hlsUrl = signedPath;
             }
-            const enriched = this.enrichVideoWithChannel(videoObj, profileMap);
+            const enriched = this.enrichVideoWithChannel(videoObj, profileMap, analyticsMap);
             return {
                 ...enriched,
                 username: enriched.channel,

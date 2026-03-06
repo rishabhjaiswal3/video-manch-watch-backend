@@ -109,6 +109,15 @@ export class AdminService {
      * Get platform statistics
      */
     async getStats() {
+        const safeQueueStats = async (userType: 'user' | 'creator') => {
+            try {
+                return await queueService.getQueueStats(userType);
+            } catch (error: any) {
+                console.warn(`[ADMIN] Queue stats unavailable for ${userType}: ${error?.message || 'unknown error'}`);
+                return { waiting: 0, active: 0, completed: 0, failed: 0 };
+            }
+        };
+
         const [
             userCounts,
             recentUsers,
@@ -163,8 +172,8 @@ export class AdminService {
                     },
                 },
             ]),
-            queueService.getQueueStats('user'),
-            queueService.getQueueStats('creator'),
+            safeQueueStats('user'),
+            safeQueueStats('creator'),
         ]);
 
         const stats = {

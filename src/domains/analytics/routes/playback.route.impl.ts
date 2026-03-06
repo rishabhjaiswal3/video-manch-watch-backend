@@ -10,6 +10,7 @@ import { authenticate } from '../../../shared/middleware/auth.js';
 import { ensureAuthenticatedUser } from '../../../shared/utils/authHelpers.js';
 import {
     pushEventsToRedis,
+    processEventsInline,
     updateActiveSession,
     removeActiveSession,
 } from '../../../workers/services/analyticsWorker.js';
@@ -86,9 +87,16 @@ router.post('/events', async (req: Request, res: Response) => {
             return res.status(200).json({ success: true, received: 0 });
         }
 
-        // Push to Redis queue (fast — non-blocking)
-        const pushed = await pushEventsToRedis(validEvents);
-        console.log(`[PLAYBACK] 📥 Pushed ${pushed} events to Redis`);
+        let queuedInRedis = true;
+        try {
+            // Push to Redis queue (fast — non-blocking)
+            const pushed = await pushEventsToRedis(validEvents);
+            console.log(`[PLAYBACK] 📥 Pushed ${pushed} events to Redis`);
+        } catch (queueError: any) {
+            queuedInRedis = false;
+            console.warn(`[PLAYBACK] ⚠️ Redis queue unavailable, processing inline: ${queueError?.message || 'unknown error'}`);
+            await processEventsInline(validEvents);
+        }
 
         // Update active sessions in real-time (for live viewer counts)
         // These are fire-and-forget — don't block the response
@@ -103,7 +111,11 @@ router.post('/events', async (req: Request, res: Response) => {
         }
 
         // Return immediately
-        res.status(200).json({ success: true, received: validEvents.length });
+        res.status(200).json({
+            success: true,
+            received: validEvents.length,
+            processingMode: queuedInRedis ? 'queued' : 'inline',
+        });
     } catch (error: any) {
         console.error('[PLAYBACK] ❌ Error processing events:', error);
         res.status(500).json({ success: false, error: error.message });
@@ -223,6 +235,14 @@ router.get('/live', async (req: Request, res: Response) => {
         ]);
 
         const totalViewers = await ActiveSession.countDocuments();
+        const videoIds = sessions.map((v: any) => v._id).filter(Boolean);
+        const historical = videoIds.length > 0
+            ? await VideoAnalytics.aggregate([
+                { $match: { videoId: { $in: videoIds } } },
+                { $group: { _id: '$videoId', totalViews: { $sum: '$views' } } },
+            ])
+            : [];
+        const historicalMap = new Map(historical.map((row: any) => [row._id, Number(row.totalViews || 0)]));
 
         res.json({
             success: true,
@@ -232,12 +252,71 @@ router.get('/live', async (req: Request, res: Response) => {
                     videoId: v._id,
                     viewers: v.viewers,
                     avgWatchTime: Math.round(v.avgWatchTime || 0),
+                    totalViews: historicalMap.get(v._id) || 0,
                 })),
             },
         });
     } catch (error: any) {
         console.error('[PLAYBACK] ❌ Error fetching live stats:', error);
         res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
+ * GET /api/playback/live/mine
+ * Get active live sessions for the authenticated creator/admin's videos.
+ */
+router.get('/live/mine', authenticate, async (req: Request, res: Response) => {
+    try {
+        const { userId } = ensureAuthenticatedUser(req);
+        const creatorVideos = await Video.find({ userId })
+            .select('videoId')
+            .lean();
+        const videoIds = creatorVideos.map((v: any) => v.videoId).filter(Boolean);
+
+        if (videoIds.length === 0) {
+            return res.json({
+                success: true,
+                data: { totalActiveViewers: 0, videos: [] },
+            });
+        }
+
+        const sessions = await ActiveSession.aggregate([
+            { $match: { videoId: { $in: videoIds } } },
+            {
+                $group: {
+                    _id: '$videoId',
+                    viewers: { $sum: 1 },
+                    avgWatchTime: { $avg: '$watchTime' },
+                },
+            },
+            { $sort: { viewers: -1 } },
+            { $limit: 20 },
+        ]);
+
+        const historical = await VideoAnalytics.aggregate([
+            { $match: { videoId: { $in: videoIds } } },
+            { $group: { _id: '$videoId', totalViews: { $sum: '$views' } } },
+        ]);
+        const historicalMap = new Map(historical.map((row: any) => [row._id, Number(row.totalViews || 0)]));
+
+        const totalViewers = sessions.reduce((sum, item) => sum + Number(item.viewers || 0), 0);
+
+        return res.json({
+            success: true,
+            data: {
+                totalActiveViewers: totalViewers,
+                videos: sessions.map(v => ({
+                    videoId: v._id,
+                    viewers: v.viewers,
+                    avgWatchTime: Math.round(v.avgWatchTime || 0),
+                    totalViews: historicalMap.get(v._id) || 0,
+                })),
+            },
+        });
+    } catch (error: any) {
+        console.error('[PLAYBACK] ❌ Error fetching creator live stats:', error);
+        return res.status(500).json({ success: false, error: error.message });
     }
 });
 
@@ -308,6 +387,99 @@ router.get('/overview', async (req: Request, res: Response) => {
     } catch (error: any) {
         console.error('[PLAYBACK] ❌ Error fetching overview:', error);
         res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
+ * GET /api/playback/overview/mine
+ * Get playback analytics overview for authenticated creator/admin's videos.
+ */
+router.get('/overview/mine', authenticate, async (req: Request, res: Response) => {
+    try {
+        const { userId } = ensureAuthenticatedUser(req);
+        const { days = DEFAULT_ANALYTICS_DAYS } = req.query;
+
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - Number(days));
+        const startDateStr = startDate.toISOString().split('T')[0];
+
+        const creatorVideos = await Video.find({ userId })
+            .select('videoId')
+            .lean();
+        const videoIds = creatorVideos.map((v: any) => v.videoId).filter(Boolean);
+
+        if (videoIds.length === 0) {
+            return res.json({
+                success: true,
+                data: {
+                    period: { days: Number(days), start: startDateStr },
+                    activeViewers: 0,
+                    totals: {
+                        views: 0,
+                        watchTimeSeconds: 0,
+                        watchTimeFormatted: formatDuration(0),
+                        plays: 0,
+                        pauses: 0,
+                        seeks: 0,
+                        buffers: 0,
+                        errors: 0,
+                        avgCompletionRate: 0,
+                        uniqueVideosWatched: 0,
+                    },
+                },
+            });
+        }
+
+        const [stats, activeViewers] = await Promise.all([
+            VideoAnalytics.aggregate([
+                {
+                    $match: {
+                        videoId: { $in: videoIds },
+                        date: { $gte: startDateStr },
+                    },
+                },
+                {
+                    $group: {
+                        _id: null,
+                        views: { $sum: '$views' },
+                        watchTime: { $sum: '$totalWatchTime' },
+                        plays: { $sum: '$totalPlays' },
+                        pauses: { $sum: '$totalPauses' },
+                        seeks: { $sum: '$totalSeeks' },
+                        buffers: { $sum: '$totalBuffers' },
+                        errors: { $sum: '$totalErrors' },
+                        avgCompletionRate: { $avg: '$avgCompletionRate' },
+                        uniqueVideos: { $addToSet: '$videoId' },
+                    },
+                },
+            ]),
+            ActiveSession.countDocuments({ videoId: { $in: videoIds } }),
+        ]);
+
+        const totals = stats[0] || {};
+
+        return res.json({
+            success: true,
+            data: {
+                period: { days: Number(days), start: startDateStr },
+                activeViewers,
+                totals: {
+                    views: Math.round(totals.views || 0),
+                    watchTimeSeconds: Math.round(totals.watchTime || 0),
+                    watchTimeFormatted: formatDuration(Math.round(totals.watchTime || 0)),
+                    plays: Math.round(totals.plays || 0),
+                    pauses: Math.round(totals.pauses || 0),
+                    seeks: Math.round(totals.seeks || 0),
+                    buffers: Math.round(totals.buffers || 0),
+                    errors: Math.round(totals.errors || 0),
+                    avgCompletionRate: Number((totals.avgCompletionRate || 0).toFixed(1)),
+                    uniqueVideosWatched: Array.isArray(totals.uniqueVideos) ? totals.uniqueVideos.length : 0,
+                },
+            },
+        });
+    } catch (error: any) {
+        console.error('[PLAYBACK] ❌ Error fetching creator overview:', error);
+        return res.status(500).json({ success: false, error: error.message });
     }
 });
 

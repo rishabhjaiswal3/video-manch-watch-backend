@@ -20,6 +20,7 @@ const playlist_routes_js_1 = __importDefault(require("../domains/social/playlist
 const public_playlist_routes_js_1 = __importDefault(require("../domains/social/public-playlist.routes.js"));
 const reelReport_routes_js_1 = __importDefault(require("../domains/social/reelReport.routes.js"));
 const category_routes_js_1 = __importDefault(require("../domains/admin/category.routes.js"));
+const routes_js_2 = __importDefault(require("../domains/live/routes.js"));
 function registerRoutes(app) {
     app.use('/auth', routes_js_1.default);
     app.use('/upload', upload_routes_js_1.default);
@@ -37,5 +38,6 @@ function registerRoutes(app) {
     app.use('/playlists', playlist_routes_js_1.default);
     app.use('/public/playlists', public_playlist_routes_js_1.default);
     app.use('/categories', category_routes_js_1.default);
+    app.use('/live', routes_js_2.default);
 }
 //# sourceMappingURL=routes.js.map

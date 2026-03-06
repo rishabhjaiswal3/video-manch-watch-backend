@@ -102,7 +102,7 @@ export declare class UploadService {
             duration: number | undefined;
             outputs: import("mongoose").FlattenMaps<import("../../../shared/models/Video.js").IVideoOutput>[];
             masterPlaylistUrl: string | undefined;
-            contentType: "vod" | "live" | "reel";
+            contentType: "live" | "vod" | "reel";
             isDownloadable: boolean;
             isAdultContent: boolean;
             allowLikes: any;
@@ -181,7 +181,7 @@ export declare class UploadService {
         title: string;
         description: string | undefined;
         tags: string[] | undefined;
-        contentType: "vod" | "live" | "reel" | undefined;
+        contentType: "live" | "vod" | "reel" | undefined;
         thumbnail: string | undefined;
         isDownloadable: boolean | undefined;
         isAdultContent: boolean | undefined;

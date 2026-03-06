@@ -92,6 +92,13 @@ export interface IVideo extends Document {
   tags?: string[];                 // User-defined tags
   genres?: string[];               // Content genres
 
+  // Live stream state
+  isLive?: boolean;
+  liveStatus?: 'scheduled' | 'live' | 'ended';
+  liveStartedAt?: Date;
+  liveEndedAt?: Date;
+  streamKey?: string;
+
   // Content flags
   contentType?: 'vod' | 'live' | 'reel';
   isAdultContent?: boolean;
@@ -248,6 +255,16 @@ const VideoSchema = new Schema<IVideo>(
       enum: ['vod', 'live', 'reel'],
       default: 'vod',
     },
+    isLive: { type: Boolean, default: false, index: true },
+    liveStatus: {
+      type: String,
+      enum: ['scheduled', 'live', 'ended'],
+      default: 'ended',
+      index: true,
+    },
+    liveStartedAt: { type: Date },
+    liveEndedAt: { type: Date },
+    streamKey: { type: String },
     isAdultContent: { type: Boolean, default: false },
     isDownloadable: { type: Boolean, default: false },
     showTitle: { type: Boolean, default: true },
@@ -292,5 +309,6 @@ VideoSchema.index({ tags: 1 });
 VideoSchema.index({ genres: 1 });
 VideoSchema.index({ createdAt: -1 });
 VideoSchema.index({ userId: 1, visibility: 1 });
+VideoSchema.index({ isLive: 1, liveStatus: 1, createdAt: -1 });
 
 export const Video = mongoose.model<IVideo>('Video', VideoSchema);

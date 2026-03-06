@@ -16,7 +16,7 @@ export declare const initUploadSchema: z.ZodObject<{
     fileSize: number;
     description?: string | undefined;
     videoId?: string | undefined;
-    contentType?: "vod" | "live" | "reel" | undefined;
+    contentType?: "live" | "vod" | "reel" | undefined;
 }, {
     title: string;
     filename: string;
@@ -25,7 +25,7 @@ export declare const initUploadSchema: z.ZodObject<{
     description?: string | undefined;
     videoId?: string | undefined;
     tags?: string[] | undefined;
-    contentType?: "vod" | "live" | "reel" | undefined;
+    contentType?: "live" | "vod" | "reel" | undefined;
 }>;
 export declare const completeUploadSchema: z.ZodObject<{
     videoId: z.ZodString;
@@ -56,7 +56,7 @@ export declare const initUploadBatchSchema: z.ZodObject<{
         clientId: string;
         description?: string | undefined;
         videoId?: string | undefined;
-        contentType?: "vod" | "live" | "reel" | undefined;
+        contentType?: "live" | "vod" | "reel" | undefined;
     }, {
         title: string;
         filename: string;
@@ -66,7 +66,7 @@ export declare const initUploadBatchSchema: z.ZodObject<{
         description?: string | undefined;
         videoId?: string | undefined;
         tags?: string[] | undefined;
-        contentType?: "vod" | "live" | "reel" | undefined;
+        contentType?: "live" | "vod" | "reel" | undefined;
     }>, "many">;
 }, "strip", z.ZodTypeAny, {
     items: {
@@ -78,7 +78,7 @@ export declare const initUploadBatchSchema: z.ZodObject<{
         clientId: string;
         description?: string | undefined;
         videoId?: string | undefined;
-        contentType?: "vod" | "live" | "reel" | undefined;
+        contentType?: "live" | "vod" | "reel" | undefined;
     }[];
     idempotencyKey?: string | undefined;
 }, {
@@ -91,7 +91,7 @@ export declare const initUploadBatchSchema: z.ZodObject<{
         description?: string | undefined;
         videoId?: string | undefined;
         tags?: string[] | undefined;
-        contentType?: "vod" | "live" | "reel" | undefined;
+        contentType?: "live" | "vod" | "reel" | undefined;
     }[];
     idempotencyKey?: string | undefined;
 }>;
@@ -112,7 +112,7 @@ export declare const updateVideoSchema: z.ZodObject<{
     title?: string | undefined;
     thumbnail?: string | undefined;
     tags?: string[] | undefined;
-    contentType?: "vod" | "live" | "reel" | undefined;
+    contentType?: "live" | "vod" | "reel" | undefined;
     isAdultContent?: boolean | undefined;
     isDownloadable?: boolean | undefined;
     visibility?: "listed" | "unlisted" | undefined;
@@ -124,7 +124,7 @@ export declare const updateVideoSchema: z.ZodObject<{
     title?: string | undefined;
     thumbnail?: string | undefined;
     tags?: string[] | undefined;
-    contentType?: "vod" | "live" | "reel" | undefined;
+    contentType?: "live" | "vod" | "reel" | undefined;
     isAdultContent?: boolean | undefined;
     isDownloadable?: boolean | undefined;
     visibility?: "listed" | "unlisted" | undefined;
