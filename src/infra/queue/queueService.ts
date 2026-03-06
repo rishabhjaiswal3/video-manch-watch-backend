@@ -1,4 +1,5 @@
-import { Queue, QueueEvents } from 'bullmq';
+import { Queue } from 'bullmq';
+import type { ConnectionOptions } from 'bullmq';
 import { getRedisConnection } from '../../shared/config/redis.js';
 
 export interface TranscodeJobData {
@@ -9,11 +10,13 @@ export interface TranscodeJobData {
   qualities: string[];
 }
 
-let userQueue: Queue<TranscodeJobData> | null = null;
-let creatorQueue: Queue<TranscodeJobData> | null = null;
+type TranscodeQueue = Queue<TranscodeJobData, unknown, string>;
 
-export const getQueues = () => {
-  const connection = getRedisConnection();
+let userQueue: TranscodeQueue | null = null;
+let creatorQueue: TranscodeQueue | null = null;
+
+export const getQueues = (): { userQueue: TranscodeQueue; creatorQueue: TranscodeQueue } => {
+  const connection = getRedisConnection() as unknown as ConnectionOptions;
 
   if (!userQueue) {
     userQueue = new Queue<TranscodeJobData>('user-transcode-queue', {
@@ -47,7 +50,10 @@ export const getQueues = () => {
     });
   }
 
-  return { userQueue, creatorQueue };
+  return {
+    userQueue,
+    creatorQueue,
+  };
 };
 
 export const queueService = {

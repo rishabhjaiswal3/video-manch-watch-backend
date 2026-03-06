@@ -100,7 +100,7 @@ export class ProfileService {
     return Profile.findOne({ userId }).lean();
   }
 
-  async getProfileData(userId: string) {
+  async getProfileData(userId: string): Promise<Record<string, unknown> | null> {
     const profileDoc = await Profile.findOne({ userId }).lean();
     const user = await User.findById(userId).lean();
 
