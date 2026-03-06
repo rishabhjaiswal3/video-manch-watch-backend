@@ -14,11 +14,60 @@ const router = Router();
 
 const RTMP_INGEST_URL = process.env.RTMP_INGEST_URL || 'rtmp://live.videomanch.com/live';
 const BROWSER_INGEST_WS_URL = process.env.BROWSER_INGEST_WS_URL || 'wss://live.videomanch.com/live/ingest';
+const LIVE_INGEST_SHARED_SECRET = process.env.LIVE_INGEST_SHARED_SECRET || '';
 
 const getDefaultMasterPlaylistKey = (userType: string, userId: string, videoId: string) =>
   `live/${userType}/${userId}/${videoId}/master.m3u8`;
 
 const getPlaybackEntryUrl = (videoId: string) => `/playback/stream/${videoId}`;
+
+router.get('/ingest/validate/:videoId', async (req: Request, res: Response) => {
+  try {
+    if (!LIVE_INGEST_SHARED_SECRET) {
+      console.error('[LIVE] Ingest validate misconfigured - missing LIVE_INGEST_SHARED_SECRET');
+      return res.status(500).json({ success: false, error: 'Ingest validation is not configured.' });
+    }
+
+    const providedSecret = req.header('x-live-ingest-secret');
+    if (!providedSecret || providedSecret !== LIVE_INGEST_SHARED_SECRET) {
+      return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
+
+    const { videoId } = req.params;
+    const key = String(req.query.key || '');
+    if (!key) {
+      return res.status(400).json({ success: false, error: 'key is required' });
+    }
+
+    const video = await Video.findOne({ videoId, contentType: 'live' })
+      .select('videoId streamKey isLive liveStatus')
+      .lean();
+
+    if (!video) {
+      return res.status(404).json({ success: false, error: 'Live stream not found' });
+    }
+
+    if (video.streamKey !== key) {
+      return res.status(403).json({ success: false, error: 'Invalid stream key' });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        videoId: video.videoId,
+        streamKey: video.streamKey,
+        rtmpUrl: RTMP_INGEST_URL,
+        isLive: Boolean(video.isLive && video.liveStatus === 'live'),
+      },
+    });
+  } catch (error: any) {
+    console.error('[LIVE] Failed to validate ingest key:', {
+      message: error?.message,
+      stack: error?.stack,
+    });
+    return res.status(500).json({ success: false, error: 'Failed to validate ingest key' });
+  }
+});
 
 router.post('/start', authenticate, requireAdminOrCreator, liveLimiter, async (req: Request, res: Response) => {
   try {
