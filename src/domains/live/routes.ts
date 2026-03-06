@@ -34,8 +34,17 @@ router.post('/start', authenticate, requireAdminOrCreator, liveLimiter, async (r
       allowDislikes = true,
       allowComments = true,
     } = req.body || {};
+    console.log('[LIVE] Start requested', {
+      userId,
+      userType,
+      hasTitle: Boolean(title),
+      visibility,
+      hasMasterPlaylistUrlOverride: Boolean(masterPlaylistUrl),
+      requestId: req.headers['x-request-id'] || null,
+    });
 
     if (!title || typeof title !== 'string') {
+      console.log('[LIVE] Start rejected - invalid title', { userId, userType, titleType: typeof title });
       return res.status(400).json({ success: false, error: 'title is required.' });
     }
 
@@ -46,6 +55,10 @@ router.post('/start', authenticate, requireAdminOrCreator, liveLimiter, async (r
     }).select('videoId title liveStartedAt');
 
     if (existingLive) {
+      console.log('[LIVE] Start rejected - active stream already exists', {
+        userId,
+        existingVideoId: existingLive.videoId,
+      });
       return res.status(409).json({
         success: false,
         error: 'You already have an active live stream.',
@@ -63,6 +76,13 @@ router.post('/start', authenticate, requireAdminOrCreator, liveLimiter, async (r
     const playlistKey = (typeof masterPlaylistUrl === 'string' && masterPlaylistUrl.trim())
       ? masterPlaylistUrl.trim()
       : getDefaultMasterPlaylistKey(userType, userId, videoId);
+    console.log('[LIVE] Creating live stream record', {
+      userId,
+      userType,
+      videoId,
+      playlistKey,
+      ingestBase: BROWSER_INGEST_WS_URL,
+    });
 
     const now = new Date();
     const video = await Video.create({
@@ -100,6 +120,14 @@ router.post('/start', authenticate, requireAdminOrCreator, liveLimiter, async (r
         reason: 'live_started',
       }],
     });
+    console.log('[LIVE] Stream created', {
+      userId,
+      userType,
+      videoId: video.videoId,
+      playlistKey,
+      wsIngestUrl: `${BROWSER_INGEST_WS_URL}/${video.videoId}?key=${streamKey}`,
+      playbackEntryUrl: getPlaybackEntryUrl(video.videoId),
+    });
 
     return res.status(201).json({
       success: true,
@@ -117,7 +145,11 @@ router.post('/start', authenticate, requireAdminOrCreator, liveLimiter, async (r
       },
     });
   } catch (error: any) {
-    console.error('[LIVE] Failed to start stream:', error);
+    console.error('[LIVE] Failed to start stream:', {
+      message: error?.message,
+      stack: error?.stack,
+      requestId: req.headers['x-request-id'] || null,
+    });
     return res.status(500).json({ success: false, error: error.message || 'Failed to start live stream.' });
   }
 });
@@ -126,13 +158,25 @@ router.post('/:videoId/end', authenticate, requireAdminOrCreator, async (req: Re
   try {
     const { userId, roles } = ensureAuthenticatedUser(req);
     const { videoId } = req.params;
+    console.log('[LIVE] End requested', {
+      userId,
+      roles,
+      videoId,
+      requestId: req.headers['x-request-id'] || null,
+    });
 
     const liveVideo = await Video.findOne({ videoId, contentType: 'live' });
     if (!liveVideo) {
+      console.log('[LIVE] End rejected - stream not found', { userId, videoId });
       return res.status(404).json({ success: false, error: 'Live stream not found.' });
     }
 
     if (!roles.includes('admin') && liveVideo.userId !== userId) {
+      console.log('[LIVE] End rejected - forbidden', {
+        userId,
+        ownerUserId: liveVideo.userId,
+        videoId,
+      });
       return res.status(403).json({ success: false, error: 'Forbidden.' });
     }
 
@@ -141,8 +185,14 @@ router.post('/:videoId/end', authenticate, requireAdminOrCreator, async (req: Re
     liveVideo.liveEndedAt = new Date();
     liveVideo.streamKey = undefined;
     await liveVideo.save();
+    console.log('[LIVE] Stream marked ended', {
+      userId,
+      videoId: liveVideo.videoId,
+      liveEndedAt: liveVideo.liveEndedAt,
+    });
 
     await ActiveSession.deleteMany({ videoId });
+    console.log('[LIVE] Active sessions cleared', { videoId });
 
     return res.json({
       success: true,
@@ -152,7 +202,11 @@ router.post('/:videoId/end', authenticate, requireAdminOrCreator, async (req: Re
       },
     });
   } catch (error: any) {
-    console.error('[LIVE] Failed to end stream:', error);
+    console.error('[LIVE] Failed to end stream:', {
+      message: error?.message,
+      stack: error?.stack,
+      requestId: req.headers['x-request-id'] || null,
+    });
     return res.status(500).json({ success: false, error: error.message || 'Failed to end live stream.' });
   }
 });
