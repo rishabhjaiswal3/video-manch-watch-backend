@@ -69,6 +69,57 @@ router.get('/ingest/validate/:videoId', async (req: Request, res: Response) => {
   }
 });
 
+router.get('/rtmp/validate/:streamKey', async (req: Request, res: Response) => {
+  try {
+    if (!LIVE_INGEST_SHARED_SECRET) {
+      console.error('[LIVE] RTMP validate misconfigured - missing LIVE_INGEST_SHARED_SECRET');
+      return res.status(500).json({ success: false, error: 'RTMP validation is not configured.' });
+    }
+
+    const providedSecret = req.header('x-live-ingest-secret');
+    if (!providedSecret || providedSecret !== LIVE_INGEST_SHARED_SECRET) {
+      return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
+
+    const { streamKey } = req.params;
+    if (!streamKey) {
+      return res.status(400).json({ success: false, error: 'streamKey is required' });
+    }
+
+    const video = await Video.findOne({
+      streamKey,
+      contentType: 'live',
+      isLive: true,
+      liveStatus: 'live',
+    })
+      .select('videoId userId userType streamKey isLive liveStatus masterPlaylistUrl')
+      .lean();
+
+    if (!video) {
+      return res.status(404).json({ success: false, error: 'Live stream not found for stream key' });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        videoId: video.videoId,
+        userId: video.userId,
+        userType: video.userType,
+        streamKey: video.streamKey,
+        isLive: Boolean(video.isLive),
+        liveStatus: video.liveStatus,
+        masterPlaylistUrl: video.masterPlaylistUrl,
+      },
+    });
+  } catch (error: any) {
+    console.error('[LIVE] Failed to validate rtmp stream key:', {
+      message: error?.message,
+      stack: error?.stack,
+    });
+    return res.status(500).json({ success: false, error: 'Failed to validate RTMP stream key' });
+  }
+});
+
 router.post('/start', authenticate, requireAdminOrCreator, liveLimiter, async (req: Request, res: Response) => {
   try {
     const { userId, userType } = ensureAuthenticatedUser(req);
