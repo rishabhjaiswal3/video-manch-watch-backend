@@ -553,7 +553,7 @@ router.get('/my', authenticate, requireAdminOrCreator, async (req: Request, res:
   }
 });
 
-router.get('/active', authenticate, async (_req: Request, res: Response) => {
+router.get('/active', async (_req: Request, res: Response) => {
   try {
     const liveVideos = await Video.find({
       contentType: 'live',
@@ -618,7 +618,7 @@ router.get('/active', authenticate, async (_req: Request, res: Response) => {
   }
 });
 
-router.get('/scheduled', authenticate, async (_req: Request, res: Response) => {
+router.get('/scheduled', async (_req: Request, res: Response) => {
   try {
     const scheduledVideos = await Video.find({
       contentType: 'live',
