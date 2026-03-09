@@ -664,7 +664,7 @@ router.get('/stream/:videoId', async (req: Request, res: Response) => {
             video.contentType === 'live' &&
             video.isLive &&
             video.liveStatus === 'live' &&
-            (video.liveIngestStatus ? video.liveIngestStatus === 'connected' : true) &&
+            video.liveIngestStatus !== 'disconnected' &&
             video.streamKey &&
             LIVE_HLS_BASE_URL
         ) {
