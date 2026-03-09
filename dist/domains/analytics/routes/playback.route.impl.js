@@ -15,7 +15,7 @@ const router = (0, express_1.Router)();
 // Token expiry time (1 hour by default, configurable)
 const TOKEN_EXPIRY_SECONDS = (0, env_js_1.getNumericEnv)('VIDEO_TOKEN_EXPIRY_SECONDS', 3600);
 const SEGMENT_BASE_URL = process.env.VIDEO_SEGMENT_BASE_URL || 'https://video-segment.videomanch.com';
-const LIVE_HLS_BASE_URL = (process.env.LIVE_HLS_BASE_URL || '').replace(/\/+$/, '');
+const LIVE_HLS_BASE_URL = (process.env.LIVE_HLS_BASE_URL || 'https://live.videomanch.com').replace(/\/+$/, '');
 const DEFAULT_ANALYTICS_DAYS = (0, env_js_1.getNumericEnv)('ANALYTICS_DEFAULT_DAYS', 7);
 const normalizePath = (input) => {
     if (!input)
