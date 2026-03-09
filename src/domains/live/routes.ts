@@ -20,6 +20,104 @@ const getDefaultMasterPlaylistKey = (userType: string, userId: string, videoId: 
   `live/${userType}/${userId}/${videoId}/master.m3u8`;
 
 const getPlaybackEntryUrl = (videoId: string) => `/playback/stream/${videoId}`;
+const toCreatorUserType = (userType: string) => (userType === 'admin' ? 'creator' : userType);
+const buildIngestPayload = (videoId: string, streamKey: string) => ({
+  rtmpUrl: RTMP_INGEST_URL,
+  rtmpKey: streamKey,
+  wsIngestUrl: `${BROWSER_INGEST_WS_URL}/${videoId}?key=${streamKey}`,
+});
+
+router.post('/schedule', authenticate, requireAdminOrCreator, liveLimiter, async (req: Request, res: Response) => {
+  try {
+    const { userId, userType } = ensureAuthenticatedUser(req);
+    const {
+      title,
+      description,
+      thumbnail,
+      tags,
+      visibility = 'listed',
+      masterPlaylistUrl,
+      scheduledAt,
+      allowLikes = true,
+      allowDislikes = true,
+      allowComments = true,
+    } = req.body || {};
+
+    if (!title || typeof title !== 'string') {
+      return res.status(400).json({ success: false, error: 'title is required.' });
+    }
+
+    const parsedSchedule =
+      typeof scheduledAt === 'string' && scheduledAt.trim()
+        ? new Date(scheduledAt)
+        : new Date();
+
+    if (Number.isNaN(parsedSchedule.getTime())) {
+      return res.status(400).json({ success: false, error: 'scheduledAt must be a valid ISO date string.' });
+    }
+
+    const videoId = uuidv4();
+    const streamKey = crypto.randomBytes(24).toString('hex');
+    const playlistKey = (typeof masterPlaylistUrl === 'string' && masterPlaylistUrl.trim())
+      ? masterPlaylistUrl.trim()
+      : getDefaultMasterPlaylistKey(userType, userId, videoId);
+
+    const video = await Video.create({
+      videoId,
+      userId,
+      userType: toCreatorUserType(userType),
+      title: title.trim(),
+      description: typeof description === 'string' ? description.trim() : '',
+      status: 'completed',
+      transcodingCompleted: true,
+      contentType: 'live',
+      isLive: false,
+      liveStatus: 'scheduled',
+      liveScheduledAt: parsedSchedule,
+      streamKey,
+      masterPlaylistUrl: playlistKey,
+      thumbnail: typeof thumbnail === 'string' ? thumbnail : undefined,
+      tags: Array.isArray(tags) ? tags : [],
+      visibility: visibility === 'unlisted' ? 'unlisted' : 'listed',
+      allowLikes: Boolean(allowLikes),
+      allowDislikes: Boolean(allowDislikes),
+      allowComments: Boolean(allowComments),
+      duration: 0,
+      outputs: [],
+      originalFile: {
+        filename: `live-${videoId}.m3u8`,
+        size: 0,
+        mimeType: 'application/vnd.apple.mpegurl',
+        r2Key: playlistKey,
+      },
+      statusHistory: [{
+        from: 'pending',
+        to: 'completed',
+        at: new Date(),
+        reason: 'live_scheduled',
+      }],
+    });
+
+    return res.status(201).json({
+      success: true,
+      data: {
+        videoId: video.videoId,
+        title: video.title,
+        streamKey,
+        ingest: buildIngestPayload(video.videoId, streamKey),
+        playbackEntryUrl: getPlaybackEntryUrl(video.videoId),
+        scheduledAt: video.liveScheduledAt,
+      },
+    });
+  } catch (error: any) {
+    console.error('[LIVE] Failed to schedule stream:', {
+      message: error?.message,
+      stack: error?.stack,
+      requestId: req.headers['x-request-id'] || null,
+    });
+    return res.status(500).json({ success: false, error: error.message || 'Failed to schedule live stream.' });
+  }
+});
 
 router.get('/ingest/validate/:videoId', async (req: Request, res: Response) => {
   try {
@@ -188,7 +286,7 @@ router.post('/start', authenticate, requireAdminOrCreator, liveLimiter, async (r
     const video = await Video.create({
       videoId,
       userId,
-      userType: userType === 'admin' ? 'creator' : userType,
+      userType: toCreatorUserType(userType),
       title: title.trim(),
       description: typeof description === 'string' ? description.trim() : '',
       status: 'completed',
@@ -236,9 +334,7 @@ router.post('/start', authenticate, requireAdminOrCreator, liveLimiter, async (r
         title: video.title,
         streamKey,
         ingest: {
-          rtmpUrl: RTMP_INGEST_URL,
-          rtmpKey: streamKey,
-          wsIngestUrl: `${BROWSER_INGEST_WS_URL}/${video.videoId}?key=${streamKey}`,
+          ...buildIngestPayload(video.videoId, streamKey),
         },
         playbackEntryUrl: getPlaybackEntryUrl(video.videoId),
         startedAt: video.liveStartedAt,
@@ -311,6 +407,89 @@ router.post('/:videoId/end', authenticate, requireAdminOrCreator, async (req: Re
   }
 });
 
+router.post('/:videoId/go-live', authenticate, requireAdminOrCreator, async (req: Request, res: Response) => {
+  try {
+    const { userId, roles } = ensureAuthenticatedUser(req);
+    const { videoId } = req.params;
+
+    const scheduledVideo = await Video.findOne({ videoId, contentType: 'live' });
+    if (!scheduledVideo) {
+      return res.status(404).json({ success: false, error: 'Live stream not found.' });
+    }
+
+    if (!roles.includes('admin') && scheduledVideo.userId !== userId) {
+      return res.status(403).json({ success: false, error: 'Forbidden.' });
+    }
+
+    if (scheduledVideo.isLive && scheduledVideo.liveStatus === 'live') {
+      return res.json({
+        success: true,
+        data: {
+          videoId: scheduledVideo.videoId,
+          liveStatus: scheduledVideo.liveStatus,
+          startedAt: scheduledVideo.liveStartedAt,
+          streamKey: scheduledVideo.streamKey,
+          ingest: buildIngestPayload(scheduledVideo.videoId, scheduledVideo.streamKey || ''),
+          playbackEntryUrl: getPlaybackEntryUrl(scheduledVideo.videoId),
+        },
+      });
+    }
+
+    const existingLive = await Video.findOne({
+      userId: scheduledVideo.userId,
+      contentType: 'live',
+      isLive: true,
+      liveStatus: 'live',
+      videoId: { $ne: scheduledVideo.videoId },
+    }).select('videoId title liveStartedAt');
+
+    if (existingLive) {
+      return res.status(409).json({
+        success: false,
+        error: 'You already have an active live stream.',
+        data: {
+          videoId: existingLive.videoId,
+          title: existingLive.title,
+          startedAt: existingLive.liveStartedAt,
+          playbackEntryUrl: getPlaybackEntryUrl(existingLive.videoId),
+        },
+      });
+    }
+
+    if (!scheduledVideo.streamKey) {
+      scheduledVideo.streamKey = crypto.randomBytes(24).toString('hex');
+    }
+
+    scheduledVideo.isLive = true;
+    scheduledVideo.liveStatus = 'live';
+    scheduledVideo.liveStartedAt = new Date();
+    if (!scheduledVideo.liveScheduledAt) {
+      scheduledVideo.liveScheduledAt = scheduledVideo.liveStartedAt;
+    }
+    await scheduledVideo.save();
+
+    return res.json({
+      success: true,
+      data: {
+        videoId: scheduledVideo.videoId,
+        title: scheduledVideo.title,
+        liveStatus: scheduledVideo.liveStatus,
+        startedAt: scheduledVideo.liveStartedAt,
+        streamKey: scheduledVideo.streamKey,
+        ingest: buildIngestPayload(scheduledVideo.videoId, scheduledVideo.streamKey),
+        playbackEntryUrl: getPlaybackEntryUrl(scheduledVideo.videoId),
+      },
+    });
+  } catch (error: any) {
+    console.error('[LIVE] Failed to transition scheduled stream to live:', {
+      message: error?.message,
+      stack: error?.stack,
+      requestId: req.headers['x-request-id'] || null,
+    });
+    return res.status(500).json({ success: false, error: error.message || 'Failed to go live.' });
+  }
+});
+
 router.get('/my', authenticate, requireAdminOrCreator, async (req: Request, res: Response) => {
   try {
     const { userId } = ensureAuthenticatedUser(req);
@@ -341,6 +520,7 @@ router.get('/my', authenticate, requireAdminOrCreator, async (req: Request, res:
         thumbnail: video.thumbnail,
         isLive: Boolean(video.isLive),
         liveStatus: video.liveStatus || (video.isLive ? 'live' : 'ended'),
+        liveScheduledAt: video.liveScheduledAt,
         liveStartedAt: video.liveStartedAt,
         liveEndedAt: video.liveEndedAt,
         viewers: viewerMap.get(video.videoId) || 0,
@@ -354,7 +534,7 @@ router.get('/my', authenticate, requireAdminOrCreator, async (req: Request, res:
   }
 });
 
-router.get('/active', async (_req: Request, res: Response) => {
+router.get('/active', authenticate, async (_req: Request, res: Response) => {
   try {
     const liveVideos = await Video.find({
       contentType: 'live',
@@ -411,6 +591,53 @@ router.get('/active', async (_req: Request, res: Response) => {
   } catch (error: any) {
     console.error('[LIVE] Failed to fetch active streams:', error);
     return res.status(500).json({ success: false, error: error.message || 'Failed to fetch active streams.' });
+  }
+});
+
+router.get('/scheduled', authenticate, async (_req: Request, res: Response) => {
+  try {
+    const scheduledVideos = await Video.find({
+      contentType: 'live',
+      isLive: false,
+      liveStatus: 'scheduled',
+      status: 'completed',
+      liveScheduledAt: { $ne: null },
+    })
+      .sort({ liveScheduledAt: 1, createdAt: -1 })
+      .limit(50)
+      .lean();
+
+    if (scheduledVideos.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+
+    const profiles = await Profile.find({ userId: { $in: scheduledVideos.map((v: any) => v.userId) } })
+      .select('userId displayName username avatar isVerified')
+      .lean();
+    const profileMap = new Map(profiles.map((p: any) => [p.userId, p]));
+
+    return res.json({
+      success: true,
+      data: scheduledVideos.map((video: any) => {
+        const profile = profileMap.get(video.userId);
+        return {
+          videoId: video.videoId,
+          userId: video.userId,
+          title: video.title,
+          description: video.description,
+          thumbnail: video.thumbnail,
+          tags: video.tags || [],
+          scheduledAt: video.liveScheduledAt,
+          channel: profile?.displayName || profile?.username || 'Unknown',
+          channelAvatar: profile?.avatar || '',
+          channelVerified: Boolean(profile?.isVerified),
+          playbackEntryUrl: getPlaybackEntryUrl(video.videoId),
+        };
+      }),
+    });
+  } catch (error: any) {
+    console.error('[LIVE] Failed to fetch scheduled streams:', error);
+    return res.status(500).json({ success: false, error: error.message || 'Failed to fetch scheduled streams.' });
   }
 });
 

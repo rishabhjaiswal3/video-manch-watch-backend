@@ -154,6 +154,7 @@ const VideoSchema = new mongoose_1.Schema({
         default: 'ended',
         index: true,
     },
+    liveScheduledAt: { type: Date },
     liveStartedAt: { type: Date },
     liveEndedAt: { type: Date },
     streamKey: { type: String },
