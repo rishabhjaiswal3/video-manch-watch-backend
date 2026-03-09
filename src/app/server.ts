@@ -77,6 +77,13 @@ export function createServer(allowedOrigins: string[], nodeEnv: string, trustPro
     });
   }
 
+  // Backward-compatible API prefix support:
+  // keep root routes (/playback, /live, ...) and also serve the same routes under /api/*
+  // so existing clients configured with either base continue to work.
+  const apiRouter = express.Router();
+  registerRoutes(apiRouter as any);
+  app.use('/api', apiRouter);
+
   registerRoutes(app);
 
   app.use(notFoundHandler);
