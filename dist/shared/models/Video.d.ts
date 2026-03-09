@@ -69,6 +69,7 @@ export interface IVideo extends Document {
     genres?: string[];
     isLive?: boolean;
     liveStatus?: 'scheduled' | 'live' | 'ended';
+    liveIngestStatus?: 'idle' | 'connected' | 'disconnected';
     liveScheduledAt?: Date;
     liveStartedAt?: Date;
     liveEndedAt?: Date;

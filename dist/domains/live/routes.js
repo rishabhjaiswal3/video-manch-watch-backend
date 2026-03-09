@@ -26,6 +26,19 @@ const buildIngestPayload = (videoId, streamKey) => ({
     rtmpKey: streamKey,
     wsIngestUrl: `${BROWSER_INGEST_WS_URL}/${videoId}?key=${streamKey}`,
 });
+const verifyIngestSecret = (req, res) => {
+    if (!LIVE_INGEST_SHARED_SECRET) {
+        console.error('[LIVE] ingest event misconfigured - missing LIVE_INGEST_SHARED_SECRET');
+        res.status(500).json({ success: false, error: 'Ingest events are not configured.' });
+        return false;
+    }
+    const providedSecret = req.header('x-live-ingest-secret');
+    if (!providedSecret || providedSecret !== LIVE_INGEST_SHARED_SECRET) {
+        res.status(403).json({ success: false, error: 'Forbidden' });
+        return false;
+    }
+    return true;
+};
 router.post('/schedule', auth_js_1.authenticate, adminAuth_js_1.requireAdminOrCreator, rateLimiter_js_1.liveLimiter, async (req, res) => {
     try {
         const { userId, userType } = (0, authHelpers_js_1.ensureAuthenticatedUser)(req);
@@ -55,6 +68,7 @@ router.post('/schedule', auth_js_1.authenticate, adminAuth_js_1.requireAdminOrCr
             contentType: 'live',
             isLive: false,
             liveStatus: 'scheduled',
+            liveIngestStatus: 'idle',
             liveScheduledAt: parsedSchedule,
             streamKey,
             masterPlaylistUrl: playlistKey,
@@ -249,6 +263,7 @@ router.post('/start', auth_js_1.authenticate, adminAuth_js_1.requireAdminOrCreat
             contentType: 'live',
             isLive: true,
             liveStatus: 'live',
+            liveIngestStatus: 'idle',
             liveStartedAt: now,
             streamKey,
             masterPlaylistUrl: playlistKey,
@@ -329,6 +344,7 @@ router.post('/:videoId/end', auth_js_1.authenticate, adminAuth_js_1.requireAdmin
         }
         liveVideo.isLive = false;
         liveVideo.liveStatus = 'ended';
+        liveVideo.liveIngestStatus = 'disconnected';
         liveVideo.liveEndedAt = new Date();
         liveVideo.streamKey = undefined;
         await liveVideo.save();
@@ -404,6 +420,7 @@ router.post('/:videoId/go-live', auth_js_1.authenticate, adminAuth_js_1.requireA
         }
         scheduledVideo.isLive = true;
         scheduledVideo.liveStatus = 'live';
+        scheduledVideo.liveIngestStatus = 'idle';
         scheduledVideo.liveStartedAt = new Date();
         if (!scheduledVideo.liveScheduledAt) {
             scheduledVideo.liveScheduledAt = scheduledVideo.liveStartedAt;
@@ -459,6 +476,7 @@ router.get('/my', auth_js_1.authenticate, adminAuth_js_1.requireAdminOrCreator, 
                 thumbnail: video.thumbnail,
                 isLive: Boolean(video.isLive),
                 liveStatus: video.liveStatus || (video.isLive ? 'live' : 'ended'),
+                liveIngestStatus: video.liveIngestStatus || 'idle',
                 liveScheduledAt: video.liveScheduledAt,
                 liveStartedAt: video.liveStartedAt,
                 liveEndedAt: video.liveEndedAt,
@@ -478,7 +496,12 @@ router.get('/active', auth_js_1.authenticate, async (_req, res) => {
         const liveVideos = await Video_js_1.Video.find({
             contentType: 'live',
             isLive: true,
+            liveStatus: 'live',
             status: 'completed',
+            $or: [
+                { liveIngestStatus: 'connected' },
+                { liveIngestStatus: { $exists: false } },
+            ],
         })
             .sort({ liveStartedAt: -1 })
             .limit(50)
@@ -571,6 +594,72 @@ router.get('/scheduled', auth_js_1.authenticate, async (_req, res) => {
     catch (error) {
         console.error('[LIVE] Failed to fetch scheduled streams:', error);
         return res.status(500).json({ success: false, error: error.message || 'Failed to fetch scheduled streams.' });
+    }
+});
+router.post('/ingest/events', async (req, res) => {
+    try {
+        if (!verifyIngestSecret(req, res))
+            return;
+        const { event, videoId, streamKey, source, reason } = req.body || {};
+        if (event !== 'ingest_started' && event !== 'ingest_stopped') {
+            return res.status(400).json({ success: false, error: 'event must be ingest_started or ingest_stopped' });
+        }
+        const query = { contentType: 'live' };
+        if (typeof videoId === 'string' && videoId.trim())
+            query.videoId = videoId.trim();
+        else if (typeof streamKey === 'string' && streamKey.trim())
+            query.streamKey = streamKey.trim();
+        else
+            return res.status(400).json({ success: false, error: 'videoId or streamKey is required' });
+        const video = await Video_js_1.Video.findOne(query);
+        if (!video) {
+            return res.status(404).json({ success: false, error: 'Live stream not found' });
+        }
+        if (event === 'ingest_started') {
+            if (!video.isLive)
+                video.isLive = true;
+            if (video.liveStatus !== 'live')
+                video.liveStatus = 'live';
+            if (!video.liveStartedAt)
+                video.liveStartedAt = new Date();
+            video.liveIngestStatus = 'connected';
+            if (!video.streamKey && typeof streamKey === 'string' && streamKey.trim()) {
+                video.streamKey = streamKey.trim();
+            }
+            await video.save();
+            return res.json({
+                success: true,
+                data: {
+                    videoId: video.videoId,
+                    liveStatus: video.liveStatus,
+                    liveIngestStatus: video.liveIngestStatus,
+                    source: source || 'unknown',
+                },
+            });
+        }
+        if (video.liveStatus === 'live') {
+            video.liveIngestStatus = 'disconnected';
+            await video.save();
+        }
+        await VideoAnalytics_js_1.ActiveSession.deleteMany({ videoId: video.videoId });
+        return res.json({
+            success: true,
+            data: {
+                videoId: video.videoId,
+                liveStatus: video.liveStatus,
+                liveIngestStatus: video.liveIngestStatus || 'disconnected',
+                source: source || 'unknown',
+                reason: reason || null,
+            },
+        });
+    }
+    catch (error) {
+        console.error('[LIVE] Failed to process ingest event:', {
+            message: error?.message,
+            stack: error?.stack,
+            requestId: req.headers['x-request-id'] || null,
+        });
+        return res.status(500).json({ success: false, error: error.message || 'Failed to process ingest event.' });
     }
 });
 exports.default = router;

@@ -154,6 +154,12 @@ const VideoSchema = new mongoose_1.Schema({
         default: 'ended',
         index: true,
     },
+    liveIngestStatus: {
+        type: String,
+        enum: ['idle', 'connected', 'disconnected'],
+        default: 'idle',
+        index: true,
+    },
     liveScheduledAt: { type: Date },
     liveStartedAt: { type: Date },
     liveEndedAt: { type: Date },

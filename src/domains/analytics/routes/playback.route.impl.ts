@@ -664,6 +664,7 @@ router.get('/stream/:videoId', async (req: Request, res: Response) => {
             video.contentType === 'live' &&
             video.isLive &&
             video.liveStatus === 'live' &&
+            (video.liveIngestStatus ? video.liveIngestStatus === 'connected' : true) &&
             video.streamKey &&
             LIVE_HLS_BASE_URL
         ) {
@@ -677,6 +678,7 @@ router.get('/stream/:videoId', async (req: Request, res: Response) => {
                     duration: video.duration,
                     masterPlaylist: {
                         signedUrl: directLiveUrl,
+                        playbackPath: directLiveUrl,
                         expires: 0,
                         expiresIn: 0,
                     },
@@ -699,6 +701,12 @@ router.get('/stream/:videoId', async (req: Request, res: Response) => {
         const signedMaster = generateSignedUrl({
             videoId,
             path: masterPlaylistPath,  // Use actual R2 path from database
+            expiresIn: TOKEN_EXPIRY_SECONDS,
+            deviceType: reqDeviceType,
+        });
+        const signedMasterPlaybackPath = generateSignedUrl({
+            videoId,
+            path: `playback/master/${videoId}`,
             expiresIn: TOKEN_EXPIRY_SECONDS,
             deviceType: reqDeviceType,
         });
@@ -729,6 +737,7 @@ router.get('/stream/:videoId', async (req: Request, res: Response) => {
                 duration: video.duration,
                 masterPlaylist: {
                     signedUrl: signedMaster.signedPath,
+                    playbackPath: `/${signedMasterPlaybackPath.signedPath}`,
                     expires: signedMaster.expires,
                     expiresIn: TOKEN_EXPIRY_SECONDS,
                 },

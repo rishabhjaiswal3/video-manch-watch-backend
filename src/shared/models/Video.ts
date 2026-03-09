@@ -95,6 +95,7 @@ export interface IVideo extends Document {
   // Live stream state
   isLive?: boolean;
   liveStatus?: 'scheduled' | 'live' | 'ended';
+  liveIngestStatus?: 'idle' | 'connected' | 'disconnected';
   liveScheduledAt?: Date;
   liveStartedAt?: Date;
   liveEndedAt?: Date;
@@ -261,6 +262,12 @@ const VideoSchema = new Schema<IVideo>(
       type: String,
       enum: ['scheduled', 'live', 'ended'],
       default: 'ended',
+      index: true,
+    },
+    liveIngestStatus: {
+      type: String,
+      enum: ['idle', 'connected', 'disconnected'],
+      default: 'idle',
       index: true,
     },
     liveScheduledAt: { type: Date },
