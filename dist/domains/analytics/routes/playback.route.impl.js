@@ -15,6 +15,7 @@ const router = (0, express_1.Router)();
 // Token expiry time (1 hour by default, configurable)
 const TOKEN_EXPIRY_SECONDS = (0, env_js_1.getNumericEnv)('VIDEO_TOKEN_EXPIRY_SECONDS', 3600);
 const SEGMENT_BASE_URL = process.env.VIDEO_SEGMENT_BASE_URL || 'https://video-segment.videomanch.com';
+const LIVE_HLS_BASE_URL = (process.env.LIVE_HLS_BASE_URL || '').replace(/\/+$/, '');
 const DEFAULT_ANALYTICS_DAYS = (0, env_js_1.getNumericEnv)('ANALYTICS_DEFAULT_DAYS', 7);
 const normalizePath = (input) => {
     if (!input)
@@ -605,6 +606,30 @@ router.get('/stream/:videoId', async (req, res) => {
             return res.status(404).json({
                 success: false,
                 error: 'Video not found',
+            });
+        }
+        // Live streams from ingest server are not in R2 master playlist path yet.
+        // Serve direct HLS URL when configured.
+        if (video.contentType === 'live' &&
+            video.isLive &&
+            video.liveStatus === 'live' &&
+            video.streamKey &&
+            LIVE_HLS_BASE_URL) {
+            const directLiveUrl = `${LIVE_HLS_BASE_URL}/live/${video.streamKey}/index.m3u8`;
+            return res.json({
+                success: true,
+                data: {
+                    videoId,
+                    title: video.title,
+                    thumbnail: video.thumbnail,
+                    duration: video.duration,
+                    masterPlaylist: {
+                        signedUrl: directLiveUrl,
+                        expires: 0,
+                        expiresIn: 0,
+                    },
+                    outputs: [],
+                },
             });
         }
         const masterPlaylistPath = normalizePath(video.masterPlaylistUrl || '');
