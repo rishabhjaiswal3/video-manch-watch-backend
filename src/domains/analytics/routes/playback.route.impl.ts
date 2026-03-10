@@ -785,6 +785,13 @@ router.get('/master/:videoId', async (req: Request, res: Response) => {
             return res.status(404).send('Playlist not found');
         }
 
+        // Live videos are served from the live ingest server, not R2.
+        // Redirect to the live HLS URL instead of trying to fetch from R2.
+        if (video.contentType === 'live' && video.isLive && video.streamKey) {
+            const liveUrl = `${LIVE_HLS_BASE_URL}/live/${video.streamKey}/index.m3u8`;
+            return res.redirect(302, liveUrl);
+        }
+
         const masterKey = normalizePath(video.masterPlaylistUrl);
         const baseDir = masterKey.substring(0, masterKey.lastIndexOf('/') + 1);
 
