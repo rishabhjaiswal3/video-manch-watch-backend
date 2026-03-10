@@ -261,11 +261,12 @@ router.post('/start', authenticate, requireAdminOrCreator, liveLimiter, async (r
       return res.status(400).json({ success: false, error: 'title is required.' });
     }
 
+    // Atomic check: prevent race condition where two simultaneous requests both pass the check
     const existingLive = await Video.findOne({
       userId,
       contentType: 'live',
       isLive: true,
-    }).select('videoId title liveStartedAt');
+    }).select('videoId title liveStartedAt').lean();
 
     if (existingLive) {
       console.log('[LIVE] Start rejected - active stream already exists', {
@@ -709,7 +710,19 @@ router.post('/ingest/events', async (req: Request, res: Response) => {
       video.liveIngestStatus = 'disconnected';
       await video.save();
     }
-    await ActiveSession.deleteMany({ videoId: video.videoId });
+    // Grace period: wait 8 seconds before clearing sessions.
+    // Handles brief disconnects where the ingest reconnects within seconds.
+    setTimeout(async () => {
+      try {
+        const current = await Video.findOne({ videoId: video.videoId }).select('liveIngestStatus').lean();
+        // Only clear sessions if still disconnected (not reconnected)
+        if (current?.liveIngestStatus === 'disconnected') {
+          await ActiveSession.deleteMany({ videoId: video.videoId });
+        }
+      } catch {
+        // fire-and-forget, ignore errors
+      }
+    }, 8000);
 
     return res.json({
       success: true,
