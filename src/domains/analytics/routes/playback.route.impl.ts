@@ -70,7 +70,12 @@ const ensureCanAccessUserAnalytics = (req: Request, res: Response): boolean => {
  */
 router.post('/events', async (req: Request, res: Response) => {
     try {
-        const { events } = req.body;
+        // sendBeacon sends Content-Type: text/plain — parse body manually if needed
+        let body = req.body;
+        if (!body || typeof body === 'string') {
+            try { body = JSON.parse(body || '{}'); } catch { body = {}; }
+        }
+        const { events } = body;
 
         if (!events || !Array.isArray(events)) {
             return res.status(400).json({ success: false, error: 'events array required' });

@@ -67,6 +67,7 @@ export function createServer(allowedOrigins: string[], nodeEnv: string, trustPro
   }
 
   app.use(express.json({ limit: '35mb' }));
+  app.use(express.text({ type: 'text/plain', limit: '2mb' }));
   app.use(express.urlencoded({ extended: true, limit: '35mb' }));
   app.use(apiLimiter as any);
 
