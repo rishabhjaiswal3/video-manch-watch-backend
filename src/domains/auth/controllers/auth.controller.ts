@@ -103,8 +103,18 @@ export class AuthController {
 
     async signup(req: Request, res: Response) {
         try {
-            const { email, password } = req.body;
-            const result = await authService.signup(email, password);
+            const { email, password, otp } = req.body;
+
+            if (!otp) {
+                const result = await authService.startSignup('user', email);
+                return res.status(200).json({
+                    success: true,
+                    data: result,
+                    message: 'OTP sent to your email.',
+                });
+            }
+
+            const result = await authService.verifySignupOtpAndCreate('user', email, otp, password);
             this.setAuthCookies(res, result);
 
             return res.status(201).json({
@@ -121,10 +131,20 @@ export class AuthController {
                 });
             }
 
-            console.error('[AUTH] Signup error:', error);
-            return res.status(500).json({
+            const message = error?.message || 'Failed to create account.';
+            const status = message.includes('OTP')
+                ? 401
+                : message.includes('exists')
+                    ? 409
+                    : 500;
+
+            if (status === 500) {
+                console.error('[AUTH] Signup error:', error);
+            }
+
+            return res.status(status).json({
                 success: false,
-                error: 'Failed to create account.',
+                error: message,
             });
         }
     }

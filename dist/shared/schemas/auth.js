@@ -13,6 +13,7 @@ exports.signupSchema = zod_1.z.object({
         .string()
         .min(8, 'Password must be at least 8 characters')
         .max(100, 'Password is too long'),
+    otp: zod_1.z.string().trim().length(6, 'OTP must be 6 digits').optional(),
 });
 exports.loginSchema = zod_1.z.object({
     email: zod_1.z

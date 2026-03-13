@@ -26,6 +26,10 @@ export declare class AuthService {
      * Signup logic (Create user + tokens)
      */
     signup(email: string, password: string): Promise<AuthSuccess>;
+    startSignup(role: 'user' | 'creator', email: string): Promise<{
+        otpSent: boolean;
+        ttlSeconds: number;
+    }>;
     /**
      * Login logic (Verify password + tokens)
      */

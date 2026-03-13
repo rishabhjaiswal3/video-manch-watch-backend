@@ -2,11 +2,10 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ConfigService = void 0;
 const AppConfig_js_1 = require("../../../shared/models/AppConfig.js");
-const DEFAULT_PLAYER_URL = process.env.PLAYER_SCRIPT_URL ||
-    'https://video-manch-player.videomanch.com/v1.0.0/videomanch-player.js';
+const DEFAULT_PLAYER_URL = 'https://video-manch-player.videomanch.com/v1.1.4/videomanch-player.js';
 class ConfigService {
     /**
-     * Get current player script URL
+     * Get current player script URL — DB is source of truth, hardcoded URL is last resort fallback.
      */
     async getPlayerUrl() {
         const config = await AppConfig_js_1.AppConfig.findOne({ key: 'player' }).lean();

@@ -11,6 +11,7 @@ export const signupSchema = z.object({
     .string()
     .min(8, 'Password must be at least 8 characters')
     .max(100, 'Password is too long'),
+  otp: z.string().trim().length(6, 'OTP must be 6 digits').optional(),
 });
 
 export const loginSchema = z.object({

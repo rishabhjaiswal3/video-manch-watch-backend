@@ -64,7 +64,17 @@ const ensureCanAccessUserAnalytics = (req, res) => {
  */
 router.post('/events', async (req, res) => {
     try {
-        const { events } = req.body;
+        // sendBeacon sends Content-Type: text/plain — parse body manually if needed
+        let body = req.body;
+        if (!body || typeof body === 'string') {
+            try {
+                body = JSON.parse(body || '{}');
+            }
+            catch {
+                body = {};
+            }
+        }
+        const { events } = body;
         if (!events || !Array.isArray(events)) {
             return res.status(400).json({ success: false, error: 'events array required' });
         }
@@ -613,7 +623,7 @@ router.get('/stream/:videoId', async (req, res) => {
         if (video.contentType === 'live' &&
             video.isLive &&
             video.liveStatus === 'live' &&
-            (video.liveIngestStatus ? video.liveIngestStatus === 'connected' : true) &&
+            video.liveIngestStatus !== 'disconnected' &&
             video.streamKey &&
             LIVE_HLS_BASE_URL) {
             const directLiveUrl = `${LIVE_HLS_BASE_URL}/live/${video.streamKey}/index.m3u8`;
@@ -717,6 +727,12 @@ router.get('/master/:videoId', async (req, res) => {
         }).lean();
         if (!video || !video.masterPlaylistUrl) {
             return res.status(404).send('Playlist not found');
+        }
+        // Live videos are served from the live ingest server, not R2.
+        // Redirect to the live HLS URL instead of trying to fetch from R2.
+        if (video.contentType === 'live' && video.isLive && video.streamKey) {
+            const liveUrl = `${LIVE_HLS_BASE_URL}/live/${video.streamKey}/index.m3u8`;
+            return res.redirect(302, liveUrl);
         }
         const masterKey = normalizePath(video.masterPlaylistUrl);
         const baseDir = masterKey.substring(0, masterKey.lastIndexOf('/') + 1);

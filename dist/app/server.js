@@ -62,6 +62,7 @@ function createServer(allowedOrigins, nodeEnv, trustProxyHops) {
         });
     }
     app.use(express_1.default.json({ limit: '35mb' }));
+    app.use(express_1.default.text({ type: 'text/plain', limit: '2mb' }));
     app.use(express_1.default.urlencoded({ extended: true, limit: '35mb' }));
     app.use(rateLimiter_js_1.apiLimiter);
     if (nodeEnv !== 'production') {

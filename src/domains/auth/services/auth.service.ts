@@ -105,12 +105,37 @@ export class AuthService {
      * Signup logic (Create user + tokens)
      */
     async signup(email: string, password: string): Promise<AuthSuccess> {
-        const user = new User({ email, password, userType: 'user', roles: ['user'] });
-
-        // Duplicate email check happens at DB level (caught by controller)
+        const normalizedEmail = this.normalizeEmail(email);
+        const user = new User({ email: normalizedEmail, password, userType: 'user', roles: ['user'] });
         await user.save();
-
         return this.issueAuthTokens(user, 'user');
+    }
+
+    async startSignup(role: 'user' | 'creator', email: string): Promise<{ otpSent: boolean; ttlSeconds: number }> {
+        const normalizedEmail = this.normalizeEmail(email);
+        const existing = await User.findOne({ email: normalizedEmail });
+        if (existing) {
+            throw new Error('Account already exists. Please login instead.');
+        }
+
+        const otp = this.generateOtp();
+        const redis = getRedisConnection();
+        const key = this.buildOtpKey(role, normalizedEmail);
+        await redis.set(key, otp, 'EX', AuthService.OTP_TTL_SECONDS);
+
+        const emailResult = await sendOtpEmail(
+            { email: normalizedEmail, name: normalizedEmail.split('@')[0] },
+            otp
+        );
+
+        if (!emailResult.success) {
+            throw new Error(emailResult.error || 'Failed to send OTP email.');
+        }
+
+        return {
+            otpSent: true,
+            ttlSeconds: AuthService.OTP_TTL_SECONDS,
+        };
     }
 
     /**

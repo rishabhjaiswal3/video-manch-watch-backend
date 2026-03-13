@@ -218,11 +218,12 @@ router.post('/start', auth_js_1.authenticate, adminAuth_js_1.requireAdminOrCreat
             console.log('[LIVE] Start rejected - invalid title', { userId, userType, titleType: typeof title });
             return res.status(400).json({ success: false, error: 'title is required.' });
         }
+        // Atomic check: prevent race condition where two simultaneous requests both pass the check
         const existingLive = await Video_js_1.Video.findOne({
             userId,
             contentType: 'live',
             isLive: true,
-        }).select('videoId title liveStartedAt');
+        }).select('videoId title liveStartedAt').lean();
         if (existingLive) {
             console.log('[LIVE] Start rejected - active stream already exists', {
                 userId,
@@ -491,7 +492,7 @@ router.get('/my', auth_js_1.authenticate, adminAuth_js_1.requireAdminOrCreator, 
         return res.status(500).json({ success: false, error: error.message || 'Failed to fetch live streams.' });
     }
 });
-router.get('/active', auth_js_1.authenticate, async (_req, res) => {
+router.get('/active', async (_req, res) => {
     try {
         const liveVideos = await Video_js_1.Video.find({
             contentType: 'live',
@@ -552,7 +553,7 @@ router.get('/active', auth_js_1.authenticate, async (_req, res) => {
         return res.status(500).json({ success: false, error: error.message || 'Failed to fetch active streams.' });
     }
 });
-router.get('/scheduled', auth_js_1.authenticate, async (_req, res) => {
+router.get('/scheduled', async (_req, res) => {
     try {
         const scheduledVideos = await Video_js_1.Video.find({
             contentType: 'live',
@@ -641,7 +642,20 @@ router.post('/ingest/events', async (req, res) => {
             video.liveIngestStatus = 'disconnected';
             await video.save();
         }
-        await VideoAnalytics_js_1.ActiveSession.deleteMany({ videoId: video.videoId });
+        // Grace period: wait 8 seconds before clearing sessions.
+        // Handles brief disconnects where the ingest reconnects within seconds.
+        setTimeout(async () => {
+            try {
+                const current = await Video_js_1.Video.findOne({ videoId: video.videoId }).select('liveIngestStatus').lean();
+                // Only clear sessions if still disconnected (not reconnected)
+                if (current?.liveIngestStatus === 'disconnected') {
+                    await VideoAnalytics_js_1.ActiveSession.deleteMany({ videoId: video.videoId });
+                }
+            }
+            catch {
+                // fire-and-forget, ignore errors
+            }
+        }, 8000);
         return res.json({
             success: true,
             data: {

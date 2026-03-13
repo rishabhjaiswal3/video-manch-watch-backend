@@ -1,1 +1,1 @@
-{"version":3,"file":"config.service.d.ts","sourceRoot":"","sources":["../../../../src/domains/admin/services/config.service.ts"],"names":[],"mappings":"AAMA,qBAAa,aAAa;IACtB;;OAEG;IACG,YAAY;IAKlB;;OAEG;IACG,eAAe,CAAC,MAAM,EAAE,MAAM;CAsBvC"}
+{"version":3,"file":"config.service.d.ts","sourceRoot":"","sources":["../../../../src/domains/admin/services/config.service.ts"],"names":[],"mappings":"AAIA,qBAAa,aAAa;IACtB;;OAEG;IACG,YAAY;IAKlB;;OAEG;IACG,eAAe,CAAC,MAAM,EAAE,MAAM;CAsBvC"}

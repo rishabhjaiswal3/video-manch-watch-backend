@@ -1,6 +1,6 @@
 export declare class ConfigService {
     /**
-     * Get current player script URL
+     * Get current player script URL — DB is source of truth, hardcoded URL is last resort fallback.
      */
     getPlayerUrl(): Promise<string>;
     /**
