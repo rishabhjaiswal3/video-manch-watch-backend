@@ -1,6 +1,6 @@
 import { AppConfig } from '../../../shared/models/AppConfig.js';
 
-const DEFAULT_PLAYER_URL = 'https://video-manch-player.videomanch.com/v1.1.4/videomanch-player.js';
+const DEFAULT_PLAYER_URL = 'https://video-manch-player.videomanch.com/v2.0.0/videomanch-player.js';
 
 export class ConfigService {
     /**
