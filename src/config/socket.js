@@ -3,6 +3,8 @@ import { createAdapter } from '@socket.io/redis-adapter';
 import Redis from 'ioredis';
 
 let io = null;
+let pubClient = null;
+let subClient = null;
 
 export const initializeSocket = (httpServer, corsOrigins) => {
   io = new Server(httpServer, {
@@ -14,9 +16,12 @@ export const initializeSocket = (httpServer, corsOrigins) => {
   if (redisUrl) {
     try {
       const isTls = redisUrl.startsWith('rediss://');
-      const redisOptions = isTls ? { tls: { rejectUnauthorized: false } } : {};
-      const pubClient = new Redis(redisUrl, redisOptions);
-      const subClient = pubClient.duplicate();
+      const redisOptions = {
+        maxRetriesPerRequest: null,
+        ...(isTls ? { tls: { rejectUnauthorized: false } } : {}),
+      };
+      pubClient = new Redis(redisUrl, redisOptions);
+      subClient = pubClient.duplicate(redisOptions);
       pubClient.on('error', (err) => console.error('[Socket] Redis pub error:', err.message));
       subClient.on('error', (err) => console.error('[Socket] Redis sub error:', err.message));
       io.adapter(createAdapter(pubClient, subClient));
@@ -49,6 +54,31 @@ export const initializeSocket = (httpServer, corsOrigins) => {
 export const getIO = () => {
   if (!io) throw new Error('Socket.io not initialized');
   return io;
+};
+
+export const disconnectSocket = async () => {
+  const tasks = [];
+
+  if (io) {
+    io.close();
+    io = null;
+    console.log('[Socket] Server closed');
+  }
+
+  if (subClient) {
+    tasks.push(subClient.quit().catch(() => subClient.disconnect()));
+    subClient = null;
+  }
+
+  if (pubClient) {
+    tasks.push(pubClient.quit().catch(() => pubClient.disconnect()));
+    pubClient = null;
+  }
+
+  if (tasks.length > 0) {
+    await Promise.allSettled(tasks);
+    console.log('[Socket] Redis adapter connections closed');
+  }
 };
 
 const emitToVideoRoom = (videoId, event, data) => {

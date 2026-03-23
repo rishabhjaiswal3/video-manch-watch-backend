@@ -3,7 +3,7 @@ import http from 'http';
 import { loadEnvironment } from './config/env.js';
 import { connectDatabase, disconnectDatabase } from './config/db.js';
 import { disconnectRedis } from './config/redis.js';
-import { initializeSocket } from './config/socket.js';
+import { disconnectSocket, initializeSocket } from './config/socket.js';
 import { createApp } from './app.js';
 
 const env = loadEnvironment();
@@ -12,13 +12,18 @@ const allowedOrigins = env.FRONTEND_URL.split(',').map((url) => url.trim());
 
 const app = createApp(allowedOrigins);
 let server;
+let isShuttingDown = false;
 
 const gracefulShutdown = async (signal) => {
+  if (isShuttingDown) {
+    return;
+  }
+  isShuttingDown = true;
   console.log(`\n[SHUTDOWN] ${signal} received. Shutting down...`);
 
   server.close(async () => {
     console.log('[SHUTDOWN] HTTP server closed');
-    await Promise.allSettled([disconnectDatabase(), disconnectRedis()]);
+    await Promise.allSettled([disconnectSocket(), disconnectDatabase(), disconnectRedis()]);
     console.log('[SHUTDOWN] All connections closed');
     process.exit(0);
   });
