@@ -1,0 +1,9 @@
+export const SIGNUP_OTP_TTL_MS = 5 * 60 * 1000;
+export const SIGNUP_OTP_MAX_ATTEMPTS = 3;
+export const SIGNUP_OTP_LOCK_MS = 30 * 60 * 1000;
+export const SIGNUP_OTP_RESEND_COOLDOWN_MS = 60 * 1000;
+export const SIGNUP_OTP_EMAIL_SEND_WINDOW_MS = 60 * 60 * 1000;
+export const SIGNUP_OTP_EMAIL_SEND_LIMIT = 5;
+export const SIGNUP_OTP_IP_SEND_WINDOW_MS = 60 * 60 * 1000;
+export const SIGNUP_OTP_IP_SEND_LIMIT = 10;
+export const SIGNUP_OTP_DISPATCH_LOCK_MS = 30 * 1000;
