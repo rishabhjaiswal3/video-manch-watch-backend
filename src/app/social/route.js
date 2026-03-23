@@ -11,6 +11,8 @@ const router = Router();
 
 router.get('/comments/:videoId', commentCtrl.getVideoComments);
 router.post('/comments/:videoId', authenticate, commentCtrl.addComment);
+router.get('/comments/video/:videoId', commentCtrl.getVideoComments);
+router.post('/comments/video/:videoId', authenticate, commentCtrl.addComment);
 router.get('/comments/:commentId/replies', commentCtrl.getCommentReplies);
 router.post('/comments/:commentId/reply', authenticate, commentCtrl.replyToComment);
 router.patch('/comments/:commentId', authenticate, commentCtrl.editComment);
@@ -24,18 +26,26 @@ router.delete('/engagement/:videoId', authenticate, engagementCtrl.removeEngagem
 router.get('/engagement/:videoId', engagementCtrl.getVideoEngagement);
 router.get('/engagement/:videoId/status', authenticate, engagementCtrl.getUserEngagementStatus);
 router.get('/engagement/liked/videos', authenticate, engagementCtrl.getUserLikedVideos);
+router.post('/engagement/video/:videoId/like', authenticate, engagementCtrl.likeVideo);
+router.post('/engagement/video/:videoId/dislike', authenticate, engagementCtrl.dislikeVideo);
+router.delete('/engagement/video/:videoId', authenticate, engagementCtrl.removeEngagement);
+router.get('/engagement/video/:videoId', engagementCtrl.getVideoEngagement);
+router.get('/engagement/video/:videoId/status', authenticate, engagementCtrl.getUserEngagementStatus);
+router.get('/engagement/user/liked', authenticate, engagementCtrl.getUserLikedVideos);
 
 router.post('/subscriptions/:creatorId', authenticate, subscriptionCtrl.subscribe);
 router.delete('/subscriptions/:creatorId', authenticate, subscriptionCtrl.unsubscribe);
 router.get('/subscriptions/:creatorId/status', authenticate, subscriptionCtrl.getSubscriptionStatus);
 router.patch('/subscriptions/:creatorId/notify', authenticate, subscriptionCtrl.toggleNotifications);
 router.get('/subscriptions/following', authenticate, subscriptionCtrl.getFollowing);
+router.get('/subscriptions/my/following', authenticate, subscriptionCtrl.getFollowing);
 router.get('/subscriptions/subscribers', authenticate, subscriptionCtrl.getSubscribers);
 
 router.post('/watch-later/:videoId', authenticate, watchLaterCtrl.add);
 router.delete('/watch-later/:videoId', authenticate, watchLaterCtrl.remove);
 router.get('/watch-later', authenticate, watchLaterCtrl.getList);
 router.get('/watch-later/:videoId', authenticate, watchLaterCtrl.getStatus);
+router.get('/watch-later/:videoId/status', authenticate, watchLaterCtrl.getStatus);
 
 router.get('/playlists', authenticate, playlistCtrl.list);
 router.post('/playlists', authenticate, playlistCtrl.create);
@@ -48,5 +58,6 @@ router.post('/playlists/:playlistId/thumbnail-url', authenticate, playlistCtrl.g
 router.patch('/playlists/:playlistId/thumbnail', authenticate, playlistCtrl.saveThumbnail);
 
 router.post('/reports/reel', reelReportCtrl.reportReel);
+router.post('/reports/reels', reelReportCtrl.reportReel);
 
 export default router;
