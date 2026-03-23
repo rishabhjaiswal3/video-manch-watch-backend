@@ -1,7 +1,6 @@
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { User } from '../app/user/model/User.js';
-import { Profile } from '../app/user/model/Profile.js';
 import { getRedisConnection } from '../config/redis.js';
 import {
   passwordResetOtpAttemptKey,
@@ -42,6 +41,7 @@ import {
   SIGNUP_OTP_RESEND_COOLDOWN_MS,
   SIGNUP_OTP_TTL_MS,
 } from '../constants/auth/signup.js';
+import { createDefaultProfileForUser } from './profile.js';
 import { sendPasswordResetOtpEmail, sendSignupOtpEmail } from './email.js';
 import { generateOtp } from '../utils/otp.js';
 import { parseDurationToMs } from '../utils/time.js';
@@ -126,59 +126,130 @@ const incrementWindowedCounter = async (redis, key, windowSeconds) => {
   return { count, retryAfterSeconds };
 };
 
-const sanitizeUsernameBase = (value) =>
-  String(value || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9_]/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 24);
-
-const buildUsernameCandidate = (base, suffix = '') => {
-  if (!suffix) {
-    return base.slice(0, 30);
+const assertOtpSendAllowed = async (
+  redis,
+  normalizedEmail,
+  normalizedIpAddress,
+  {
+    blockKey,
+    cooldownKey,
+    emailSendCountKey,
+    ipSendCountKey,
+    maxEmailSends,
+    maxIpSends,
+  }
+) => {
+  const isBlocked = await redis.exists(blockKey);
+  if (isBlocked) {
+    const retryAfterSeconds = await getRetryAfterSeconds(redis, blockKey);
+    throw new Error(`Too many invalid OTP attempts. Please try again after ${retryAfterSeconds} seconds`);
   }
 
-  const normalizedSuffix = String(suffix).toLowerCase();
-  const trimmedBase = base.slice(0, Math.max(3, 30 - normalizedSuffix.length - 1));
-  return `${trimmedBase}_${normalizedSuffix}`;
+  const hasCooldown = await redis.exists(cooldownKey);
+  if (hasCooldown) {
+    const retryAfterSeconds = await getRetryAfterSeconds(redis, cooldownKey);
+    throw new Error(`OTP resend is temporarily locked. Please wait ${retryAfterSeconds} seconds`);
+  }
+
+  const currentEmailSendCount = parseInt((await redis.get(emailSendCountKey)) || '0', 10);
+  if (currentEmailSendCount >= maxEmailSends) {
+    const retryAfterSeconds = await getRetryAfterSeconds(redis, emailSendCountKey);
+    throw new Error(`OTP send limit reached for this email. Please try again after ${retryAfterSeconds} seconds`);
+  }
+
+  const currentIpSendCount = parseInt((await redis.get(ipSendCountKey)) || '0', 10);
+  if (currentIpSendCount >= maxIpSends) {
+    const retryAfterSeconds = await getRetryAfterSeconds(redis, ipSendCountKey);
+    throw new Error(`Too many OTP requests from this IP. Please try again after ${retryAfterSeconds} seconds`);
+  }
 };
 
-const generateUsernameSuffix = (length = 4) =>
-  crypto.randomBytes(length)
-    .toString('base64url')
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '')
-    .slice(0, length);
-
-const generateUniqueUsername = async (email) => {
-  const emailBase = email.split('@')[0];
-  const base = sanitizeUsernameBase(emailBase) || `user_${crypto.randomUUID().slice(0, 8)}`;
-  const directCandidate = buildUsernameCandidate(base);
-
-  if (!(await Profile.isUsernameTaken(directCandidate))) {
-    return directCandidate;
+const sendOtpWithGuards = async (
+  redis,
+  normalizedEmail,
+  normalizedIpAddress,
+  otp,
+  sendEmail,
+  {
+    otpKey,
+    attemptKey,
+    cooldownKey,
+    emailSendCountKey,
+    ipSendCountKey,
+    dispatchLockKey,
+    ttlMs,
+    resendCooldownMs,
+    emailWindowMs,
+    ipWindowMs,
+    dispatchLockMs,
+  }
+) => {
+  const lockAcquired = await redis.set(
+    dispatchLockKey,
+    '1',
+    'EX',
+    Math.ceil(dispatchLockMs / 1000),
+    'NX'
+  );
+  if (!lockAcquired) {
+    throw new Error('OTP request already in progress. Please try again after a few minutes');
   }
 
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    const candidate = buildUsernameCandidate(base, generateUsernameSuffix());
-    if (!(await Profile.isUsernameTaken(candidate))) {
-      return candidate;
+  try {
+    await sendEmail(normalizedEmail, otp);
+    await redis.set(otpKey, otp, 'EX', Math.floor(ttlMs / 1000));
+    await redis.del(attemptKey);
+    await redis.set(cooldownKey, '1', 'EX', Math.floor(resendCooldownMs / 1000));
+    await incrementWindowedCounter(redis, emailSendCountKey, Math.floor(emailWindowMs / 1000));
+    await incrementWindowedCounter(redis, ipSendCountKey, Math.floor(ipWindowMs / 1000));
+    return { ttlSeconds: Math.floor(ttlMs / 1000) };
+  } catch (_error) {
+    throw new Error('Failed to send OTP. Please try again after a few minutes');
+  } finally {
+    await redis.del(dispatchLockKey);
+  }
+};
+
+const verifyOtpOrThrow = async (
+  redis,
+  normalizedEmail,
+  providedOtp,
+  {
+    blockKey,
+    attemptKey,
+    otpKey,
+    maxAttempts,
+    lockMs,
+    invalidOtpMessage,
+    expiredOtpMessage,
+  }
+) => {
+  const isBlocked = await redis.exists(blockKey);
+  if (isBlocked) {
+    const retryAfterSeconds = await getRetryAfterSeconds(redis, blockKey);
+    throw new Error(`Too many invalid OTP attempts. Please try again after ${retryAfterSeconds} seconds`);
+  }
+
+  const storedOtp = await redis.get(otpKey);
+  if (!storedOtp) {
+    throw new Error(expiredOtpMessage);
+  }
+
+  if (storedOtp !== String(providedOtp || '').trim()) {
+    const attempts = await redis.incr(attemptKey);
+    if (attempts === 1) {
+      await redis.expire(attemptKey, Math.floor(lockMs / 1000));
     }
+
+    if (attempts >= maxAttempts) {
+      await redis.set(blockKey, '1', 'EX', Math.floor(lockMs / 1000));
+      await redis.del(otpKey);
+      await redis.del(attemptKey);
+      throw new Error(`Too many invalid OTP attempts. Please try again after ${Math.floor(lockMs / 1000)} seconds`);
+    }
+
+    throw new Error(invalidOtpMessage);
   }
-
-  return buildUsernameCandidate(`user_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`);
-};
-
-const createDefaultProfile = async (user) => {
-  const username = await generateUniqueUsername(user.email);
-  const displayName = user.email.split('@')[0].slice(0, 50) || 'User';
-
-  return Profile.create({
-    userId: user._id.toString(),
-    username,
-    displayName,
-  });
 };
 
 export async function requestSignupOtp(email, ipAddress = 'unknown') {
@@ -190,63 +261,28 @@ export async function requestSignupOtp(email, ipAddress = 'unknown') {
   if (existingUser) throw new Error('User already exists with this email');
 
   const redis = getRedisConnection();
-  const blockKey = signupOtpBlockKey(normalizedEmail);
-  const isBlocked = await redis.exists(blockKey);
-  if (isBlocked) {
-    const retryAfterSeconds = await getRetryAfterSeconds(redis, blockKey);
-    throw new Error(`Too many invalid OTP attempts. Please try again after ${retryAfterSeconds} seconds`);
-  }
+  await assertOtpSendAllowed(redis, normalizedEmail, normalizedIpAddress, {
+    blockKey: signupOtpBlockKey(normalizedEmail),
+    cooldownKey: signupOtpCooldownKey(normalizedEmail),
+    emailSendCountKey: signupOtpSendCountKey(normalizedEmail),
+    ipSendCountKey: signupOtpIpSendCountKey(normalizedIpAddress),
+    maxEmailSends: SIGNUP_OTP_EMAIL_SEND_LIMIT,
+    maxIpSends: SIGNUP_OTP_IP_SEND_LIMIT,
+  });
 
-  const cooldownKey = signupOtpCooldownKey(normalizedEmail);
-  const hasCooldown = await redis.exists(cooldownKey);
-  if (hasCooldown) {
-    const retryAfterSeconds = await getRetryAfterSeconds(redis, cooldownKey);
-    throw new Error(`OTP resend is temporarily locked. Please wait ${retryAfterSeconds} seconds`);
-  }
-
-  const emailSendCountKey = signupOtpSendCountKey(normalizedEmail);
-  const ipSendCountKey = signupOtpIpSendCountKey(normalizedIpAddress);
-
-  const currentEmailSendCount = parseInt((await redis.get(emailSendCountKey)) || '0', 10);
-  if (currentEmailSendCount >= SIGNUP_OTP_EMAIL_SEND_LIMIT) {
-    const retryAfterSeconds = await getRetryAfterSeconds(redis, emailSendCountKey);
-    throw new Error(`OTP send limit reached for this email. Please try again after ${retryAfterSeconds} seconds`);
-  }
-
-  const currentIpSendCount = parseInt((await redis.get(ipSendCountKey)) || '0', 10);
-  if (currentIpSendCount >= SIGNUP_OTP_IP_SEND_LIMIT) {
-    const retryAfterSeconds = await getRetryAfterSeconds(redis, ipSendCountKey);
-    throw new Error(`Too many OTP requests from this IP. Please try again after ${retryAfterSeconds} seconds`);
-  }
-
-  const dispatchLockKey = signupOtpDispatchLockKey(normalizedEmail);
-  const lockAcquired = await redis.set(
-    dispatchLockKey,
-    '1',
-    'EX',
-    Math.ceil(SIGNUP_OTP_DISPATCH_LOCK_MS / 1000),
-    'NX'
-  );
-  if (!lockAcquired) {
-    throw new Error('OTP request already in progress. Please try again after a few minutes');
-  }
-
-  const otp = generateOtp();
-  try {
-    await sendSignupOtpEmail(normalizedEmail, otp);
-    await redis.set(signupOtpKey(normalizedEmail), otp, 'EX', Math.floor(SIGNUP_OTP_TTL_MS / 1000));
-    await redis.del(signupOtpAttemptKey(normalizedEmail));
-    await redis.set(cooldownKey, '1', 'EX', Math.floor(SIGNUP_OTP_RESEND_COOLDOWN_MS / 1000));
-    await incrementWindowedCounter(redis, emailSendCountKey, Math.floor(SIGNUP_OTP_EMAIL_SEND_WINDOW_MS / 1000));
-    await incrementWindowedCounter(redis, ipSendCountKey, Math.floor(SIGNUP_OTP_IP_SEND_WINDOW_MS / 1000));
-    return {
-      ttlSeconds: Math.floor(SIGNUP_OTP_TTL_MS / 1000),
-    };
-  } catch (_error) {
-    throw new Error('Failed to send OTP. Please try again after a few minutes');
-  } finally {
-    await redis.del(dispatchLockKey);
-  }
+  return sendOtpWithGuards(redis, normalizedEmail, normalizedIpAddress, generateOtp(), sendSignupOtpEmail, {
+    otpKey: signupOtpKey(normalizedEmail),
+    attemptKey: signupOtpAttemptKey(normalizedEmail),
+    cooldownKey: signupOtpCooldownKey(normalizedEmail),
+    emailSendCountKey: signupOtpSendCountKey(normalizedEmail),
+    ipSendCountKey: signupOtpIpSendCountKey(normalizedIpAddress),
+    dispatchLockKey: signupOtpDispatchLockKey(normalizedEmail),
+    ttlMs: SIGNUP_OTP_TTL_MS,
+    resendCooldownMs: SIGNUP_OTP_RESEND_COOLDOWN_MS,
+    emailWindowMs: SIGNUP_OTP_EMAIL_SEND_WINDOW_MS,
+    ipWindowMs: SIGNUP_OTP_IP_SEND_WINDOW_MS,
+    dispatchLockMs: SIGNUP_OTP_DISPATCH_LOCK_MS,
+  });
 }
 
 export async function verifySignupOtpAndCreate(email, otp, password) {
@@ -271,26 +307,15 @@ export async function verifySignupOtpAndCreate(email, otp, password) {
     throw new Error('Password must be at least 8 characters long');
   }
 
-  const storedOtp = await redis.get(otpKey);
-  if (!storedOtp) {
-    throw new Error('Signup OTP expired or not requested');
-  }
-
-  if (storedOtp !== String(otp || '').trim()) {
-    const attempts = await redis.incr(attemptKey);
-    if (attempts === 1) {
-      await redis.expire(attemptKey, Math.floor(SIGNUP_OTP_LOCK_MS / 1000));
-    }
-
-    if (attempts >= SIGNUP_OTP_MAX_ATTEMPTS) {
-      await redis.set(blockKey, '1', 'EX', Math.floor(SIGNUP_OTP_LOCK_MS / 1000));
-      await redis.del(otpKey);
-      await redis.del(attemptKey);
-      throw new Error('Too many invalid OTP attempts. Please try again after 1800 seconds');
-    }
-
-    throw new Error('Invalid signup OTP');
-  }
+  await verifyOtpOrThrow(redis, normalizedEmail, otp, {
+    blockKey,
+    attemptKey,
+    otpKey,
+    maxAttempts: SIGNUP_OTP_MAX_ATTEMPTS,
+    lockMs: SIGNUP_OTP_LOCK_MS,
+    invalidOtpMessage: 'Invalid signup OTP',
+    expiredOtpMessage: 'Signup OTP expired or not requested',
+  });
 
   const existingUser = await User.findByEmail(normalizedEmail);
   if (existingUser) {
@@ -303,7 +328,7 @@ export async function verifySignupOtpAndCreate(email, otp, password) {
     userType: 'user',
   });
 
-  await createDefaultProfile(user);
+  await createDefaultProfileForUser(user._id.toString());
   await redis.del(otpKey);
   await redis.del(attemptKey);
   await redis.del(blockKey);
@@ -415,64 +440,28 @@ export async function requestPasswordResetOtp(role, email, ipAddress = 'unknown'
   }
 
   const redis = getRedisConnection();
-  const blockKey = passwordResetOtpBlockKey(normalizedEmail);
-  const isBlocked = await redis.exists(blockKey);
-  if (isBlocked) {
-    const retryAfterSeconds = await getRetryAfterSeconds(redis, blockKey);
-    throw new Error(`Too many invalid OTP attempts. Please try again after ${retryAfterSeconds} seconds`);
-  }
+  await assertOtpSendAllowed(redis, normalizedEmail, normalizedIpAddress, {
+    blockKey: passwordResetOtpBlockKey(normalizedEmail),
+    cooldownKey: passwordResetOtpCooldownKey(normalizedEmail),
+    emailSendCountKey: passwordResetOtpSendCountKey(normalizedEmail),
+    ipSendCountKey: passwordResetOtpIpSendCountKey(normalizedIpAddress),
+    maxEmailSends: PASSWORD_RESET_OTP_EMAIL_SEND_LIMIT,
+    maxIpSends: PASSWORD_RESET_OTP_IP_SEND_LIMIT,
+  });
 
-  const cooldownKey = passwordResetOtpCooldownKey(normalizedEmail);
-  const hasCooldown = await redis.exists(cooldownKey);
-  if (hasCooldown) {
-    const retryAfterSeconds = await getRetryAfterSeconds(redis, cooldownKey);
-    throw new Error(`OTP resend is temporarily locked. Please wait ${retryAfterSeconds} seconds`);
-  }
-
-  const emailSendCountKey = passwordResetOtpSendCountKey(normalizedEmail);
-  const ipSendCountKey = passwordResetOtpIpSendCountKey(normalizedIpAddress);
-
-  const currentEmailSendCount = parseInt((await redis.get(emailSendCountKey)) || '0', 10);
-  if (currentEmailSendCount >= PASSWORD_RESET_OTP_EMAIL_SEND_LIMIT) {
-    const retryAfterSeconds = await getRetryAfterSeconds(redis, emailSendCountKey);
-    throw new Error(`OTP send limit reached for this email. Please try again after ${retryAfterSeconds} seconds`);
-  }
-
-  const currentIpSendCount = parseInt((await redis.get(ipSendCountKey)) || '0', 10);
-  if (currentIpSendCount >= PASSWORD_RESET_OTP_IP_SEND_LIMIT) {
-    const retryAfterSeconds = await getRetryAfterSeconds(redis, ipSendCountKey);
-    throw new Error(`Too many OTP requests from this IP. Please try again after ${retryAfterSeconds} seconds`);
-  }
-
-  const dispatchLockKey = passwordResetOtpDispatchLockKey(normalizedEmail);
-  const lockAcquired = await redis.set(
-    dispatchLockKey,
-    '1',
-    'EX',
-    Math.ceil(PASSWORD_RESET_OTP_DISPATCH_LOCK_MS / 1000),
-    'NX'
-  );
-  if (!lockAcquired) {
-    throw new Error('OTP request already in progress. Please try again after a few minutes');
-  }
-
-  const otp = generateOtp();
-  try {
-    await sendPasswordResetOtpEmail(normalizedEmail, otp);
-    await redis.set(passwordResetOtpKey(normalizedEmail), otp, 'EX', Math.floor(PASSWORD_RESET_OTP_TTL_MS / 1000));
-    await redis.del(passwordResetOtpAttemptKey(normalizedEmail));
-    await redis.set(cooldownKey, '1', 'EX', Math.floor(PASSWORD_RESET_OTP_RESEND_COOLDOWN_MS / 1000));
-    await incrementWindowedCounter(redis, emailSendCountKey, Math.floor(PASSWORD_RESET_OTP_EMAIL_SEND_WINDOW_MS / 1000));
-    await incrementWindowedCounter(redis, ipSendCountKey, Math.floor(PASSWORD_RESET_OTP_IP_SEND_WINDOW_MS / 1000));
-
-    return {
-      ttlSeconds: Math.floor(PASSWORD_RESET_OTP_TTL_MS / 1000),
-    };
-  } catch (_error) {
-    throw new Error('Failed to send OTP. Please try again after a few minutes');
-  } finally {
-    await redis.del(dispatchLockKey);
-  }
+  return sendOtpWithGuards(redis, normalizedEmail, normalizedIpAddress, generateOtp(), sendPasswordResetOtpEmail, {
+    otpKey: passwordResetOtpKey(normalizedEmail),
+    attemptKey: passwordResetOtpAttemptKey(normalizedEmail),
+    cooldownKey: passwordResetOtpCooldownKey(normalizedEmail),
+    emailSendCountKey: passwordResetOtpSendCountKey(normalizedEmail),
+    ipSendCountKey: passwordResetOtpIpSendCountKey(normalizedIpAddress),
+    dispatchLockKey: passwordResetOtpDispatchLockKey(normalizedEmail),
+    ttlMs: PASSWORD_RESET_OTP_TTL_MS,
+    resendCooldownMs: PASSWORD_RESET_OTP_RESEND_COOLDOWN_MS,
+    emailWindowMs: PASSWORD_RESET_OTP_EMAIL_SEND_WINDOW_MS,
+    ipWindowMs: PASSWORD_RESET_OTP_IP_SEND_WINDOW_MS,
+    dispatchLockMs: PASSWORD_RESET_OTP_DISPATCH_LOCK_MS,
+  });
 }
 
 export async function resetPasswordWithOtp(role, email, otp, password, currentPassword) {
@@ -522,32 +511,15 @@ export async function resetPasswordWithOtp(role, email, otp, password, currentPa
   const attemptKey = passwordResetOtpAttemptKey(normalizedEmail);
   const otpKey = passwordResetOtpKey(normalizedEmail);
 
-  const isBlocked = await redis.exists(blockKey);
-  if (isBlocked) {
-    const retryAfterSeconds = await getRetryAfterSeconds(redis, blockKey);
-    throw new Error(`Too many invalid OTP attempts. Please try again after ${retryAfterSeconds} seconds`);
-  }
-
-  const storedOtp = await redis.get(otpKey);
-  if (!storedOtp) {
-    throw new Error('Password reset OTP expired or not requested');
-  }
-
-  if (storedOtp !== normalizedOtp) {
-    const attempts = await redis.incr(attemptKey);
-    if (attempts === 1) {
-      await redis.expire(attemptKey, Math.floor(PASSWORD_RESET_OTP_LOCK_MS / 1000));
-    }
-
-    if (attempts >= PASSWORD_RESET_OTP_MAX_ATTEMPTS) {
-      await redis.set(blockKey, '1', 'EX', Math.floor(PASSWORD_RESET_OTP_LOCK_MS / 1000));
-      await redis.del(otpKey);
-      await redis.del(attemptKey);
-      throw new Error('Too many invalid OTP attempts. Please try again after 1800 seconds');
-    }
-
-    throw new Error('Invalid password reset OTP');
-  }
+  await verifyOtpOrThrow(redis, normalizedEmail, normalizedOtp, {
+    blockKey,
+    attemptKey,
+    otpKey,
+    maxAttempts: PASSWORD_RESET_OTP_MAX_ATTEMPTS,
+    lockMs: PASSWORD_RESET_OTP_LOCK_MS,
+    invalidOtpMessage: 'Invalid password reset OTP',
+    expiredOtpMessage: 'Password reset OTP expired or not requested',
+  });
 
   user.password = normalizedPassword;
   user.refreshTokens = [];
