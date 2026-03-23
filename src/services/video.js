@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { Video } from '../app/media/model/Video.js';
 import { Profile } from '../app/user/model/Profile.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { generateSignedUrl } from '../utils/signedUrl.js';
 
 const toPositiveInt = (value, fallback) => {
   const parsed = Number.parseInt(String(value ?? ''), 10);
@@ -147,6 +148,25 @@ const mapReelSummary = (video, profile) => ({
   createdAt: video.createdAt,
 });
 
+const signUrl = (url, videoId) => {
+  if (!url || !process.env.VIDEO_SIGNING_SECRET) return url;
+  try {
+    return generateSignedUrl({ videoId, path: url }).signedPath;
+  } catch {
+    return url;
+  }
+};
+
+const signReelUrls = (reel) => ({
+  ...reel,
+  masterPlaylistUrl: signUrl(reel.masterPlaylistUrl, reel.videoId),
+  outputs: (reel.outputs || []).map((output) => ({
+    ...output,
+    url: signUrl(output.url, reel.videoId),
+    playlistUrl: signUrl(output.playlistUrl, reel.videoId),
+  })),
+});
+
 const attachProfiles = async (videos) => {
   const userIds = Array.from(new Set(videos.map((video) => video.userId).filter(Boolean)));
   const profiles = userIds.length
@@ -247,7 +267,7 @@ export async function listReels({ page, limit }) {
   ]);
 
   const profileMap = await attachProfiles(videos);
-  const mapped = videos.map((video) => mapReelSummary(video, profileMap.get(video.userId)));
+  const mapped = videos.map((video) => signReelUrls(mapReelSummary(video, profileMap.get(video.userId))));
 
   return {
     videos: mapped,
