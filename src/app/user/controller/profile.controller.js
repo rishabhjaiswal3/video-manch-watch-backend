@@ -3,7 +3,17 @@ import { resolveStatusCode } from '../../../utils/http.js';
 import * as profileService from '../../../services/profile.js';
 
 export async function getProfile(req, res) {
-  // TODO: implement
+  try {
+    const profile = await profileService.getProfileData(req.params.userId);
+    return res.status(200).json({ success: true, data: profile });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch profile';
+    const statusCode = resolveStatusCode(message, [
+      { when: (value) => value.includes('required'), status: 400 },
+      { when: (value) => value.includes('not found'), status: 404 },
+    ]);
+    return res.status(statusCode).json({ success: false, error: message });
+  }
 }
 
 export async function getMyProfile(req, res) {
@@ -55,7 +65,17 @@ export async function getProfileByUsername(req, res) {
 }
 
 export async function getCreatorVideos(req, res) {
-  // TODO: implement
+  try {
+    const data = await profileService.getCreatorVideos(req.params.userId, req.query.page, req.query.limit);
+    return res.status(200).json({ success: true, data });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch creator videos';
+    const statusCode = resolveStatusCode(message, [
+      { when: (value) => value.includes('required'), status: 400 },
+      { when: (value) => value.includes('not found'), status: 404 },
+    ]);
+    return res.status(statusCode).json({ success: false, error: message });
+  }
 }
 
 export async function checkUsername(req, res) {

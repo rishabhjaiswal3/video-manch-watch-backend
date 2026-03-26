@@ -29,3 +29,12 @@ export const otpVerifyLimiter = rateLimit({
   },
   message: { success: false, error: 'Too many invalid OTP attempts. Try again after 10 minutes.' },
 });
+
+export const socialMutationLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 80,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many social actions. Please slow down.' },
+  keyGenerator: (req) => `${req.user?.userId || req.ip}:social`,
+});

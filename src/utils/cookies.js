@@ -29,7 +29,12 @@ export const getCookieValue = (req, key) => {
 export const getCookieBaseOptions = () => {
   const isProd = process.env.NODE_ENV === 'production';
   const sameSite = (process.env.AUTH_COOKIE_SAME_SITE || 'lax').toLowerCase();
-  const domain = process.env.AUTH_COOKIE_DOMAIN?.trim();
+  const configuredDomain = process.env.AUTH_COOKIE_DOMAIN?.trim();
+  const isLocalDevDomain = configuredDomain
+    ? configuredDomain.includes('localhost') || configuredDomain.includes('127.0.0.1')
+    : false;
+  // Prevent invalid cookie domain on local development (e.g. ".videomanch.com" on localhost)
+  const domain = isProd && configuredDomain && !isLocalDevDomain ? configuredDomain : undefined;
 
   return {
     httpOnly: true,

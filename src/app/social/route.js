@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/auth.js';
+import { socialMutationLimiter } from '../../middleware/rateLimiter.js';
 import * as commentCtrl from './controller/comment.controller.js';
 import * as engagementCtrl from './controller/engagement.controller.js';
 import * as subscriptionCtrl from './controller/subscription.controller.js';
@@ -10,25 +11,25 @@ import * as reelReportCtrl from './controller/reelReport.controller.js';
 const router = Router();
 
 router.get('/comments/:videoId', commentCtrl.getVideoComments);
-router.post('/comments/:videoId', authenticate, commentCtrl.addComment);
+router.post('/comments/:videoId', authenticate, socialMutationLimiter, commentCtrl.addComment);
 router.get('/comments/video/:videoId', commentCtrl.getVideoComments);
-router.post('/comments/video/:videoId', authenticate, commentCtrl.addComment);
+router.post('/comments/video/:videoId', authenticate, socialMutationLimiter, commentCtrl.addComment);
 router.get('/comments/:commentId/replies', commentCtrl.getCommentReplies);
-router.post('/comments/:commentId/reply', authenticate, commentCtrl.replyToComment);
+router.post('/comments/:commentId/reply', authenticate, socialMutationLimiter, commentCtrl.replyToComment);
 router.patch('/comments/:commentId', authenticate, commentCtrl.editComment);
-router.delete('/comments/:commentId', authenticate, commentCtrl.deleteComment);
-router.post('/comments/:commentId/like', authenticate, commentCtrl.likeComment);
-router.delete('/comments/:commentId/like', authenticate, commentCtrl.unlikeComment);
+router.delete('/comments/:commentId', authenticate, socialMutationLimiter, commentCtrl.deleteComment);
+router.post('/comments/:commentId/like', authenticate, socialMutationLimiter, commentCtrl.likeComment);
+router.delete('/comments/:commentId/like', authenticate, socialMutationLimiter, commentCtrl.unlikeComment);
 
-router.post('/engagement/:videoId/like', authenticate, engagementCtrl.likeVideo);
-router.post('/engagement/:videoId/dislike', authenticate, engagementCtrl.dislikeVideo);
-router.delete('/engagement/:videoId', authenticate, engagementCtrl.removeEngagement);
+router.post('/engagement/:videoId/like', authenticate, socialMutationLimiter, engagementCtrl.likeVideo);
+router.post('/engagement/:videoId/dislike', authenticate, socialMutationLimiter, engagementCtrl.dislikeVideo);
+router.delete('/engagement/:videoId', authenticate, socialMutationLimiter, engagementCtrl.removeEngagement);
 router.get('/engagement/:videoId', engagementCtrl.getVideoEngagement);
 router.get('/engagement/:videoId/status', authenticate, engagementCtrl.getUserEngagementStatus);
 router.get('/engagement/liked/videos', authenticate, engagementCtrl.getUserLikedVideos);
-router.post('/engagement/video/:videoId/like', authenticate, engagementCtrl.likeVideo);
-router.post('/engagement/video/:videoId/dislike', authenticate, engagementCtrl.dislikeVideo);
-router.delete('/engagement/video/:videoId', authenticate, engagementCtrl.removeEngagement);
+router.post('/engagement/video/:videoId/like', authenticate, socialMutationLimiter, engagementCtrl.likeVideo);
+router.post('/engagement/video/:videoId/dislike', authenticate, socialMutationLimiter, engagementCtrl.dislikeVideo);
+router.delete('/engagement/video/:videoId', authenticate, socialMutationLimiter, engagementCtrl.removeEngagement);
 router.get('/engagement/video/:videoId', engagementCtrl.getVideoEngagement);
 router.get('/engagement/video/:videoId/status', authenticate, engagementCtrl.getUserEngagementStatus);
 router.get('/engagement/user/liked', authenticate, engagementCtrl.getUserLikedVideos);
@@ -41,8 +42,8 @@ router.get('/subscriptions/following', authenticate, subscriptionCtrl.getFollowi
 router.get('/subscriptions/my/following', authenticate, subscriptionCtrl.getFollowing);
 router.get('/subscriptions/subscribers', authenticate, subscriptionCtrl.getSubscribers);
 
-router.post('/watch-later/:videoId', authenticate, watchLaterCtrl.add);
-router.delete('/watch-later/:videoId', authenticate, watchLaterCtrl.remove);
+router.post('/watch-later/:videoId', authenticate, socialMutationLimiter, watchLaterCtrl.add);
+router.delete('/watch-later/:videoId', authenticate, socialMutationLimiter, watchLaterCtrl.remove);
 router.get('/watch-later', authenticate, watchLaterCtrl.getList);
 router.get('/watch-later/:videoId', authenticate, watchLaterCtrl.getStatus);
 router.get('/watch-later/:videoId/status', authenticate, watchLaterCtrl.getStatus);

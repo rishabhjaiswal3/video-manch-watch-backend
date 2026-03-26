@@ -1,12 +1,15 @@
 import crypto from 'crypto';
 import { Profile } from '../app/user/model/Profile.js';
 import { User } from '../app/user/model/User.js';
+import { Video } from '../app/media/model/Video.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { getCachedJson, setCachedJson } from '../utils/cache.js';
 
 const normalizeString = (value) => String(value || '').trim();
 const normalizeUsername = (username) => normalizeString(username).toLowerCase();
 const allowedGenders = new Set(['male', 'female', 'other', 'prefer_not_to_reveal']);
 const usernamePattern = /^[a-z0-9_]{3,30}$/;
+const CREATOR_VIDEOS_CACHE_TTL_MS = Number.parseInt(process.env.CREATOR_VIDEOS_CACHE_TTL_MS || '30000', 10);
 
 const sanitizeUsernameBase = (value) =>
   normalizeString(value)
@@ -182,7 +185,53 @@ export async function updateProfile(userId, data) {
 }
 
 export async function getCreatorVideos(userId, page, limit) {
-  // TODO: implement
+  if (!userId) {
+    throw new AppError('User ID is required', 400);
+  }
+
+  const safePage = Math.max(1, Number.parseInt(String(page ?? ''), 10) || 1);
+  const safeLimit = Math.min(Math.max(1, Number.parseInt(String(limit ?? ''), 10) || 20), 100);
+  const cacheKey = `profile:creatorVideos:${userId}:${safePage}:${safeLimit}`;
+  const cached = await getCachedJson(cacheKey);
+  if (cached) return cached;
+
+  const query = {
+    userId,
+    status: 'completed',
+    visibility: 'listed',
+  };
+  const skip = (safePage - 1) * safeLimit;
+
+  const [videos, total] = await Promise.all([
+    Video.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(safeLimit)
+      .select('videoId title thumbnail thumbnails duration createdAt contentType totalViews')
+      .lean(),
+    Video.countDocuments(query),
+  ]);
+
+  const result = {
+    videos: videos.map((video) => ({
+      videoId: video.videoId,
+      title: video.title,
+      thumbnail: video.thumbnail || video.thumbnails?.[0],
+      duration: video.duration,
+      views: video.totalViews || 0,
+      createdAt: video.createdAt,
+      contentType: video.contentType,
+    })),
+    pagination: {
+      page: safePage,
+      limit: safeLimit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / safeLimit)),
+    },
+  };
+
+  await setCachedJson(cacheKey, result, CREATOR_VIDEOS_CACHE_TTL_MS);
+  return result;
 }
 
 export async function isUsernameAvailable(username) {
