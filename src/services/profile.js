@@ -207,7 +207,7 @@ export async function getCreatorVideos(userId, page, limit) {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(safeLimit)
-      .select('videoId title thumbnail thumbnails duration createdAt contentType totalViews')
+      .select('videoId title thumbnail thumbnails duration createdAt contentType viewCount')
       .lean(),
     Video.countDocuments(query),
   ]);
@@ -218,7 +218,7 @@ export async function getCreatorVideos(userId, page, limit) {
       title: video.title,
       thumbnail: video.thumbnail || video.thumbnails?.[0],
       duration: video.duration,
-      views: video.totalViews || 0,
+      views: video.viewCount || 0,
       createdAt: video.createdAt,
       contentType: video.contentType,
     })),

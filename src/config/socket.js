@@ -1,5 +1,7 @@
 import jwt from "jsonwebtoken";
 import { Server } from "socket.io";
+import { ACCESS_COOKIE } from "../constants/auth/cookies.js";
+import { parseCookies } from "../utils/cookies.js";
 
 let io = null;
 const VIDEO_ID_PATTERN = /^[a-zA-Z0-9_-]{6,80}$/;
@@ -24,9 +26,11 @@ export const initializeSocket = (httpServer, allowedOrigins = []) => {
 
   io.use((socket, next) => {
     try {
+      const cookies = parseCookies(socket.handshake.headers?.cookie || "");
       const token =
         socket.handshake.auth?.token ||
-        socket.handshake.headers?.authorization?.replace("Bearer ", "");
+        socket.handshake.headers?.authorization?.replace("Bearer ", "") ||
+        cookies[ACCESS_COOKIE];
 
       if (!token) return next();
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -95,5 +99,14 @@ export const emitWatchLaterUpdate = (userId, payload = {}) => {
   getIO().to(`user:${userId}`).emit("watchLater:update", {
     userId,
     ...buildEvent("watchLater:update", payload),
+  });
+};
+
+// Emits to all clients in the creator's user room so any page showing that creator updates live
+export const emitSubscriptionUpdate = (creatorId, payload = {}) => {
+  if (!creatorId) return;
+  getIO().to(`user:${creatorId}`).emit("subscription:update", {
+    creatorId,
+    ...buildEvent("subscription:update", payload),
   });
 };

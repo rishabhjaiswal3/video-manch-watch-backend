@@ -81,6 +81,12 @@ export async function replyToComment(req, res) {
       return res.status(400).json({ success: false, error: "content is required" });
     }
     const data = await commentService.replyToComment(user.userId, commentId, content);
+
+    emitCommentEvent(data.videoId, "new", {
+      comment: data,
+      eventVersion: Date.now(),
+    });
+
     return res.status(200).json({ success: true, data });
   } catch (error) {
     return handleError(res, error, "Failed to add reply");

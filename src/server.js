@@ -5,6 +5,7 @@ import { connectDatabase, disconnectDatabase } from './config/db.js';
 import { disconnectRedis } from './config/redis.js';
 import { disconnectSocket, initializeSocket } from './config/socket.js';
 import { createApp } from './app.js';
+import { startEventFlushWorker, stopEventFlushWorker } from './workers/eventFlushWorker.js';
 
 const env = loadEnvironment();
 const PORT = env.PORT;
@@ -23,7 +24,7 @@ const gracefulShutdown = async (signal) => {
 
   server.close(async () => {
     console.log('[SHUTDOWN] HTTP server closed');
-    await Promise.allSettled([disconnectSocket(), disconnectDatabase(), disconnectRedis()]);
+    await Promise.allSettled([stopEventFlushWorker(), disconnectSocket(), disconnectDatabase(), disconnectRedis()]);
     console.log('[SHUTDOWN] All connections closed');
     process.exit(0);
   });
@@ -52,6 +53,7 @@ const start = async () => {
       console.log(`  Port: ${PORT}  |  ENV: ${env.NODE_ENV}`);
       console.log(`  Health: http://localhost:${PORT}/health`);
       console.log(`${'='.repeat(50)}\n`);
+      startEventFlushWorker();
     });
   } catch (err) {
     console.error('[FATAL] Failed to start:', err);

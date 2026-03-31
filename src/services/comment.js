@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { Comment } from "../app/social/model/Comment.js";
 import { CommentLike } from "../app/social/model/CommentLike.js";
 import { Video } from "../app/media/model/Video.js";
