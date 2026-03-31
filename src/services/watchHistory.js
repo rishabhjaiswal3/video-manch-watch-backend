@@ -49,6 +49,35 @@ export async function bulkUpsertProgress(progressItems) {
 }
 
 /**
+ * Ensure a watch-history row exists as soon as authenticated playback starts.
+ * This prevents the history page from staying empty when a user watches briefly
+ * and leaves before a later progress/watchtime event is flushed.
+ */
+export async function bulkRegisterStartedHistory(historyItems) {
+  if (!historyItems.length) return;
+
+  const ops = historyItems.map(({ userId, videoId, watchedAt }) => ({
+    updateOne: {
+      filter: { userId, videoId },
+      update: {
+        $setOnInsert: {
+          progressSecs: 0,
+          durationSecs: 0,
+          completionPct: 0,
+          completed: false,
+        },
+        $set: {
+          watchedAt: watchedAt ? new Date(watchedAt) : new Date(),
+        },
+      },
+      upsert: true,
+    },
+  }));
+
+  await WatchHistory.bulkWrite(ops, { ordered: false });
+}
+
+/**
  * Get paginated watch history for a user, with video metadata joined.
  */
 export async function getHistory(userId, page = 1, limit = 20) {

@@ -14,7 +14,7 @@
  */
 
 import { getRedisConnection } from '../config/redis.js';
-import { bulkUpsertProgress } from '../services/watchHistory.js';
+import { bulkRegisterStartedHistory, bulkUpsertProgress } from '../services/watchHistory.js';
 import { VideoView } from '../app/playback/model/VideoView.js';
 import { Video } from '../app/media/model/Video.js';
 import { PLAYBACK_EVENT_TYPES, PLAYBACK_REDIS, PLAYBACK_WORKER } from '../constants/playback.js';
@@ -38,6 +38,7 @@ async function flush() {
     if (!events.length) return;
 
     await Promise.allSettled([
+      processStartedHistory(events),
       processWatchtime(events, redis),
       processViews(events),
     ]);
@@ -46,6 +47,32 @@ async function flush() {
   } finally {
     isFlushing = false;
   }
+}
+
+/**
+ * play events → create/update a basic WatchHistory row for authenticated users
+ * even before the later watchtime/progress event arrives.
+ */
+async function processStartedHistory(events) {
+  const startedEvents = events.filter((e) => e.type === PLAYBACK_EVENT_TYPES.PLAY && e.videoId && e.userId);
+  if (!startedEvents.length) return;
+
+  const latestMap = new Map();
+  for (const event of startedEvents) {
+    const key = `${event.userId}:${event.videoId}`;
+    const existing = latestMap.get(key);
+    if (!existing || event.timestamp > existing.timestamp) {
+      latestMap.set(key, event);
+    }
+  }
+
+  await bulkRegisterStartedHistory(
+    [...latestMap.values()].map((event) => ({
+      userId: event.userId,
+      videoId: event.videoId,
+      watchedAt: event.timestamp,
+    }))
+  );
 }
 
 /**

@@ -33,7 +33,7 @@ export const PLAYBACK_INGESTION = Object.freeze({
 });
 
 export const PLAYBACK_WORKER = Object.freeze({
-  FLUSH_INTERVAL_MS: 10_000,
+  FLUSH_INTERVAL_MS: 5_000,
   BATCH_SIZE: 1_000,
   PROGRESS_TTL_SECONDS: 60 * 60 * 2,
 });
