@@ -90,5 +90,9 @@ VideoSchema.index({ createdAt: -1 });
 VideoSchema.index({ userId: 1, visibility: 1 });
 VideoSchema.index({ genres: 1 });
 VideoSchema.index({ isLive: 1, liveStatus: 1, createdAt: -1 });
+VideoSchema.index(
+  { title: 'text', tags: 'text', genres: 'text', description: 'text' },
+  { weights: { title: 10, tags: 5, genres: 3, description: 1 }, name: 'search_text' }
+);
 
 export const Video = mongoose.model('Video', VideoSchema);
