@@ -5,17 +5,19 @@
  * Processes up to BATCH_SIZE events per tick.
  *
  * Responsibilities:
- *   - Upsert WatchHistory per (userId, videoId) from watchtime events
- *   - Record unique VideoView + increment Video.viewCount from play events
- *   - Cache resume position in Redis hash for fast GET /progress reads
+ *   1. Upsert WatchHistory per (userId, videoId) from watchtime events
+ *   2. Record unique VideoView + increment Video.viewCount from play events
+ *   3. Cache resume position in Redis hash for fast GET /progress reads
+ *   4. Persist raw PlaybackEvent documents (append-only, training data store)
  *
- * This is the ONLY writer to WatchHistory and VideoView.
+ * This is the ONLY writer to WatchHistory, VideoView, and PlaybackEvent.
  * The HTTP endpoint only does LPUSH — no DB calls in the request path.
  */
 
 import { getRedisConnection } from '../config/redis.js';
 import { bulkRegisterStartedHistory, bulkUpsertProgress } from '../services/watchHistory.js';
 import { VideoView } from '../app/playback/model/VideoView.js';
+import { PlaybackEvent } from '../app/playback/model/PlaybackEvent.js';
 import { Video } from '../app/media/model/Video.js';
 import { PLAYBACK_EVENT_TYPES, PLAYBACK_REDIS, PLAYBACK_WORKER } from '../constants/playback.js';
 
@@ -38,6 +40,7 @@ async function flush() {
     if (!events.length) return;
 
     await Promise.allSettled([
+      processRawEvents(events),       // ← new: raw append-only store for ML
       processStartedHistory(events),
       processWatchtime(events, redis),
       processViews(events),
@@ -47,6 +50,63 @@ async function flush() {
   } finally {
     isFlushing = false;
   }
+}
+
+/**
+ * Persist every event as a raw PlaybackEvent document (append-only).
+ * This is the training corpus for ML models — never upserted, never deleted
+ * except by the TTL index.
+ */
+async function processRawEvents(events) {
+  const docs = events.map((e) => ({
+    userId:          e.userId || null,
+    sessionId:       e.sessionId,
+    videoId:         e.videoId,
+    eventType:       mapEventType(e.type),
+    progressSecs:    Math.floor(e.data?.currentTime ?? 0),
+    durationSecs:    Math.floor(e.data?.duration ?? 0),
+    completionPct:   Math.min(100, Math.round(e.data?.completionRate ?? 0)),
+    source:          e.source || 'unknown',
+    recModelVersion: e.recModelVersion || null,
+    recPosition:     typeof e.recPosition === 'number' ? e.recPosition : null,
+    deviceType:      e.deviceType || 'unknown',
+    data:            e.data || {},
+    clientTimestamp: e.clientTimestamp ? new Date(e.clientTimestamp) : null,
+    serverTimestamp: new Date(),
+  }));
+
+  // insertMany with ordered:false — partial failure is acceptable
+  await PlaybackEvent.insertMany(docs, { ordered: false }).catch((err) => {
+    // BulkWriteError on dupes (none expected here) or validation — log and continue
+    console.warn('[EventFlushWorker] processRawEvents partial failure:', err.message);
+  });
+}
+
+/**
+ * Map Redis queue event type strings to PlaybackEvent enum values.
+ * The queue uses the legacy type names; the DB model uses the expanded set.
+ */
+function mapEventType(type) {
+  const map = {
+    play:               'play',
+    pause:              'pause',
+    seek:               'seek',
+    seek_end:           'seek_end',
+    quality_change:     'quality_change',
+    buffer:             'buffer',
+    buffer_start:       'buffer_start',
+    ended:              'ended',
+    error:              'error',
+    heartbeat:          'heartbeat',
+    watchtime:          'watchtime',
+    progress:           'watchtime',   // alias
+    speed_change:       'speed_change',
+    player_init:        'player_init',
+    player_destroy:     'player_destroy',
+    stream_interrupted: 'stream_interrupted',
+    stream_resumed:     'stream_resumed',
+  };
+  return map[type] ?? 'watchtime';
 }
 
 /**
@@ -68,8 +128,8 @@ async function processStartedHistory(events) {
 
   await bulkRegisterStartedHistory(
     [...latestMap.values()].map((event) => ({
-      userId: event.userId,
-      videoId: event.videoId,
+      userId:    event.userId,
+      videoId:   event.videoId,
       watchedAt: event.timestamp,
     }))
   );
@@ -82,7 +142,6 @@ async function processWatchtime(events, redis) {
   const watchtimeEvents = events.filter((e) => e.type === PLAYBACK_EVENT_TYPES.WATCHTIME && e.videoId && e.userId);
   if (!watchtimeEvents.length) return;
 
-  // Keep only the latest watchtime per (userId, videoId) pair
   const latestMap = new Map();
   for (const e of watchtimeEvents) {
     const key = `${e.userId}:${e.videoId}`;
@@ -102,7 +161,6 @@ async function processWatchtime(events, redis) {
 
     progressItems.push({ userId: e.userId, videoId: e.videoId, progressSecs, durationSecs, completionPct });
 
-    // Cache for fast GET /progress reads
     const hashKey = `${PLAYBACK_REDIS.PROGRESS_KEY_PREFIX}:${e.userId}:${e.videoId}`;
     redisPipeline.hset(
       hashKey,
@@ -124,11 +182,9 @@ async function processWatchtime(events, redis) {
  * play events → unique VideoView + increment viewCount on Video
  */
 async function processViews(events) {
-  // First play per sessionId is a view
   const playEvents = events.filter((e) => e.type === PLAYBACK_EVENT_TYPES.PLAY && e.videoId && e.sessionId);
   if (!playEvents.length) return;
 
-  // Deduplicate by sessionId within this batch
   const seen = new Set();
   const unique = [];
   for (const e of playEvents) {
@@ -138,7 +194,6 @@ async function processViews(events) {
     }
   }
 
-  // Insert views — ignore duplicates (unique index on videoId+sessionId)
   const viewOps = unique.map((e) => ({
     updateOne: {
       filter: { videoId: e.videoId, sessionId: e.sessionId },
@@ -149,10 +204,8 @@ async function processViews(events) {
 
   const result = await VideoView.bulkWrite(viewOps, { ordered: false });
 
-  // Increment viewCount only for genuinely new views
   const newViews = result.upsertedCount ?? 0;
   if (newViews > 0) {
-    // Group new views by videoId to do minimal DB round-trips
     const videoViewCounts = new Map();
     for (const e of unique) {
       videoViewCounts.set(e.videoId, (videoViewCounts.get(e.videoId) ?? 0) + 1);
@@ -178,7 +231,6 @@ export async function stopEventFlushWorker() {
     clearInterval(flushTimer);
     flushTimer = null;
   }
-  // Final flush on shutdown
   await flush();
   console.log('[EventFlushWorker] Stopped');
 }
