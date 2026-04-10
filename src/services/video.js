@@ -104,7 +104,7 @@ const buildVideoQuery = ({ contentType, search, searchString, category, tags, ge
 const mapProfileByUserId = (profiles) =>
   new Map(profiles.map((profile) => [profile.userId, profile]));
 
-const mapVideoSummary = (video, profile) => ({
+export const mapVideoSummary = (video, profile) => ({
   id: video.videoId,
   videoId: video.videoId,
   userId: video.userId,
@@ -169,7 +169,7 @@ const signReelUrls = (reel) => ({
   })),
 });
 
-const attachProfiles = async (videos) => {
+export const attachProfiles = async (videos) => {
   const userIds = Array.from(new Set(videos.map((video) => video.userId).filter(Boolean)));
   const profiles = userIds.length
     ? await Profile.find({ userId: { $in: userIds } }).lean()
