@@ -1,16 +1,20 @@
 import { Router } from 'express';
-import { authenticate } from '../../middleware/auth.js';
-import * as playbackCtrl from './controller/playback.controller.js';
-import * as eventsCtrl   from './controller/events.controller.js';
-import * as historyCtrl  from './controller/history.controller.js';
+import { authenticate, optionalAuthenticate } from '../../middleware/auth.js';
+import * as playbackCtrl   from './controller/playback.controller.js';
+import * as eventsCtrl     from './controller/events.controller.js';
+import * as historyCtrl    from './controller/history.controller.js';
+import * as discoveryCtrl  from './controller/discovery.controller.js';
 
 const router = Router();
 
 // Signed stream URL (existing)
 router.get('/stream/:videoId', playbackCtrl.getSignedStream);
 
-// Event ingestion — auth optional, high-throughput, Redis-only
+// Event ingestion — auth required, high-throughput, Redis-only
 router.post('/events', authenticate, eventsCtrl.ingestEvents);
+
+// Discovery/recommendation events — auth optional, fire-and-forget
+router.post('/discovery-events', optionalAuthenticate, discoveryCtrl.ingestDiscoveryEvents);
 
 // Watch history + resume position — auth required
 router.get('/history',           authenticate, historyCtrl.getHistory);
