@@ -3,7 +3,8 @@ import * as videoCtrl from './controller/video.controller.js';
 import * as relatedCtrl from './controller/related.controller.js';
 import * as searchCtrl from './controller/search.controller.js';
 import * as recsCtrl from './controller/recommendations.controller.js';
-import { optionalAuthenticate } from '../../middleware/auth.js';
+import { optionalAuthenticate, authenticate } from '../../middleware/auth.js';
+import * as recommendationCtrl from './controller/recommendation.controller.js';
 
 const router = Router();
 
