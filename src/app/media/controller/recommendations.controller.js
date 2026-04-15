@@ -11,7 +11,12 @@ export async function listRecommendations(req, res) {
       contentType: contentType || undefined,
     });
 
-    return res.status(200).json({ success: true, data });
+    const items = (data.items || []).map((item, idx) => ({
+      ...item,
+      recPosition: idx,
+    }));
+
+    return res.status(200).json({ success: true, data: { ...data, items } });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to get recommendations';
     return res.status(500).json({ success: false, error: message });

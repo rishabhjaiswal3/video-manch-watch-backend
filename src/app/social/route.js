@@ -7,6 +7,7 @@ import * as subscriptionCtrl from './controller/subscription.controller.js';
 import * as watchLaterCtrl from './controller/watchLater.controller.js';
 import * as playlistCtrl from './controller/playlist.controller.js';
 import * as reelReportCtrl from './controller/reelReport.controller.js';
+import * as notificationCtrl from './controller/notification.controller.js';
 
 const router = Router();
 
@@ -60,5 +61,11 @@ router.patch('/playlists/:playlistId/thumbnail', authenticate, playlistCtrl.save
 
 router.post('/reports/reel', reelReportCtrl.reportReel);
 router.post('/reports/reels', reelReportCtrl.reportReel);
+
+router.post('/notifications/devices/register', authenticate, notificationCtrl.registerDevice);
+router.post('/notifications/devices/unregister', authenticate, notificationCtrl.unregisterDevice);
+router.get('/notifications/me', authenticate, notificationCtrl.getMyNotifications);
+router.patch('/notifications/:notificationId/read', authenticate, notificationCtrl.markNotificationAsRead);
+router.patch('/notifications/read-all', authenticate, notificationCtrl.markAllNotificationsAsRead);
 
 export default router;

@@ -8,7 +8,11 @@ import * as recommendationCtrl from './controller/recommendation.controller.js';
 
 const router = Router();
 
+// Hybrid / explore (optional auth — Mongo scoring). Safe for anonymous clients.
 router.get('/recommendations', optionalAuthenticate, recsCtrl.listRecommendations);
+// Python worker artifacts + global backfill (auth required).
+router.get('/recommendations/personalized', authenticate, recommendationCtrl.getRecommendations);
+
 router.get('/search/suggestions', searchCtrl.suggestions);
 router.get('/search', optionalAuthenticate, searchCtrl.search);
 router.get('/videos', videoCtrl.listVideos);
@@ -16,10 +20,5 @@ router.get('/interest', videoCtrl.listVideos);
 router.get('/videos/reels', videoCtrl.listReels);
 router.get('/videos/:videoId/related', optionalAuthenticate, relatedCtrl.listRelatedVideos);
 router.get('/videos/:videoId', videoCtrl.getVideo);
-
-// ── Personalized recommendations (auth required) ──────────────────────────────
-// GET /media/recommendations?limit=20&contentType=vod
-// Falls back to global trending for cold-start users.
-router.get('/recommendations', authenticate, recommendationCtrl.getRecommendations);
 
 export default router;
