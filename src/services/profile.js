@@ -4,6 +4,7 @@ import { User } from '../app/user/model/User.js';
 import { Video } from '../app/media/model/Video.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { getCachedJson, setCachedJson } from '../utils/cache.js';
+import { uploadBuffer, R2_USER_ASSETS_BUCKET, userAssetsPublicBaseUrl } from '../utils/r2.js';
 
 const normalizeString = (value) => String(value || '').trim();
 const normalizeUsername = (username) => normalizeString(username).toLowerCase();
@@ -245,4 +246,67 @@ export async function isUsernameAvailable(username) {
   }
 
   return !(await Profile.isUsernameTaken(normalizedUsername));
+}
+
+const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+
+const hasExpectedImageSignature = (mimeType, body) => {
+  if (mimeType === 'image/png') {
+    return body.length >= 8 &&
+      body[0] === 0x89 && body[1] === 0x50 && body[2] === 0x4e && body[3] === 0x47 &&
+      body[4] === 0x0d && body[5] === 0x0a && body[6] === 0x1a && body[7] === 0x0a;
+  }
+  if (mimeType === 'image/jpeg') {
+    return body.length >= 3 && body[0] === 0xff && body[1] === 0xd8 && body[2] === 0xff;
+  }
+  if (mimeType === 'image/gif') {
+    return body.length >= 6 &&
+      body[0] === 0x47 && body[1] === 0x49 && body[2] === 0x46 && body[3] === 0x38 &&
+      (body[4] === 0x37 || body[4] === 0x39) && body[5] === 0x61;
+  }
+  if (mimeType === 'image/webp') {
+    return body.length >= 12 &&
+      body.toString('ascii', 0, 4) === 'RIFF' &&
+      body.toString('ascii', 8, 12) === 'WEBP';
+  }
+  return false;
+};
+
+export async function uploadAssetDirect(userId, type, mimeType, body) {
+  if (!ALLOWED_IMAGE_MIME_TYPES.has(mimeType)) {
+    throw new AppError('Unsupported image type. Allowed: jpeg, png, webp, gif', 400);
+  }
+  if (!body || !body.length) {
+    throw new AppError('Empty file payload', 400);
+  }
+  if (body.length > 20 * 1024 * 1024) {
+    throw new AppError('File too large. Maximum size is 20MB', 400);
+  }
+  if (!hasExpectedImageSignature(mimeType, body)) {
+    throw new AppError('Image signature does not match declared MIME type', 400);
+  }
+
+  let profile = await Profile.findOne({ userId });
+  if (!profile) {
+    const user = await User.findById(userId).lean();
+    if (!user) throw new AppError('User not found', 404);
+    profile = await createDefaultProfileForUser(userId, {});
+  }
+
+  const fileId = crypto.randomUUID();
+  const extension = mimeType === 'image/png' ? 'png'
+    : mimeType === 'image/webp' ? 'webp'
+    : mimeType === 'image/gif' ? 'gif'
+    : 'jpg';
+  const key = `user/${userId}/${fileId}/original/${fileId}.${extension}`;
+
+  await uploadBuffer(R2_USER_ASSETS_BUCKET, key, body, mimeType);
+
+  const base = userAssetsPublicBaseUrl.replace(/\/+$/, '');
+  const url = `${base}/${key}`;
+
+  const field = type === 'avatar' ? 'avatar' : 'banner';
+  await Profile.updateOne({ userId }, { [field]: url });
+
+  return { key, url };
 }

@@ -90,3 +90,34 @@ export async function checkUsername(req, res) {
     return res.status(statusCode).json({ success: false, error: message });
   }
 }
+
+export async function uploadAsset(req, res) {
+  try {
+    const user = ensureAuthenticatedUser(req);
+    const type = req.params.type;
+    if (type !== 'avatar' && type !== 'banner') {
+      return res.status(400).json({ success: false, error: 'Invalid asset type. Must be avatar or banner' });
+    }
+
+    const mimeType = req.headers['content-type']?.split(';')[0]?.trim() || '';
+    const body = req.body;
+
+    if (!Buffer.isBuffer(body)) {
+      return res.status(400).json({ success: false, error: 'Request body must be raw binary image data' });
+    }
+
+    const result = await profileService.uploadAssetDirect(user.userId, type, mimeType, body);
+    return res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Upload failed';
+    const statusCode = resolveStatusCode(message, [
+      { when: (value) => value.includes('Authentication required'), status: 401 },
+      { when: (value) => value.includes('not found'), status: 404 },
+      { when: (value) => value.includes('Unsupported'), status: 415 },
+      { when: (value) => value.includes('too large'), status: 413 },
+      { when: (value) => value.includes('signature'), status: 422 },
+      { when: (value) => value.includes('Empty'), status: 400 },
+    ]);
+    return res.status(statusCode).json({ success: false, error: message });
+  }
+}
